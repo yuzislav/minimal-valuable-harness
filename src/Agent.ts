@@ -59,15 +59,19 @@ export class Agent {
         prompt += `</tool>\n`;
       }
       
-      prompt += `\nTo call tools, output XML blocks formatted exactly like this:
+      prompt += `\nCRITICAL INSTRUCTIONS FOR TOOL CALLING:
+You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
 <tool_call>
   <name>tool_name</name>
   <arguments>
     <arg_name>arg_value</arg_name>
   </arguments>
 </tool_call>
-You can output multiple <tool_call> blocks to execute them in parallel.
-If you call a tool, wait for the user to provide the execution results before proceeding.`;
+
+- You MUST wrap your parameters inside an <arguments> block.
+- You MUST use <name> for the tool's name.
+- You can output multiple <tool_call> blocks to execute them in parallel.
+- Wait for the user to provide the execution results before proceeding.`;
     }
 
     return prompt;
@@ -78,29 +82,57 @@ If you call a tool, wait for the user to provide the execution results before pr
    */
   private parseToolCalls(text: string): ToolCall[] {
     const toolCalls: ToolCall[] = [];
-    const regex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      const callContent = match[1];
-      const nameMatch = callContent.match(/<name>(.*?)<\/name>/);
-      const argsMatch = callContent.match(/<arguments>([\s\S]*?)<\/arguments>/);
+    // Model sometimes outputs <tool> or <call> instead of <tool_call>
+    const blockRegex = /<(?:tool_call|tool|call)>([\s\S]*?)<\/(?:tool_call|tool|call)>/g;
+    
+    let blockMatch;
+    while ((blockMatch = blockRegex.exec(text)) !== null) {
+      let content = blockMatch[1];
+      let name = '';
       
+      const nameMatch = content.match(/<name>(.*?)<\/name>/);
       if (nameMatch) {
-        const name = nameMatch[1].trim();
+        name = nameMatch[1].trim();
+      } else {
+        // Fallback: extract the first tag as the name, and use its content as the inner block
+        const firstTagMatch = content.match(/<([a-zA-Z0-9_]+)>([\s\S]*?)<\/\1[^>]*>/);
+        if (firstTagMatch && !['arguments', 'parameters', 'name'].includes(firstTagMatch[1])) {
+          name = firstTagMatch[1].trim();
+          content = firstTagMatch[2];
+        }
+      }
+
+      if (name) {
+        // Strip wrapper tags so they don't consume argument tags in the regex
+        content = content.replace(/<\/?(?:arguments|parameters|name)[^>]*>/g, '');
+        
         const args: Record<string, any> = {};
         
-        if (argsMatch) {
-          const argsStr = argsMatch[1];
-          const argRegex = /<([a-zA-Z0-9_]+)>([\s\S]*?)<\/\1>/g;
-          let argMatch;
-          while ((argMatch = argRegex.exec(argsStr)) !== null) {
-            args[argMatch[1]] = argMatch[2].trim();
-          }
+        // Match standard tags: <tag>content</tag> (robust to trailing characters in closing tag)
+        const tagRegex = /<([a-zA-Z0-9_]+)[^>]*>([\s\S]*?)<\/\1[^>]*>/g;
+        let match;
+        while ((match = tagRegex.exec(content)) !== null) {
+          args[match[1]] = this.unescapeXML(match[2].trim());
         }
+        
+        // Match self-closing tags: <tag val="content" />
+        const scRegex = /<([a-zA-Z0-9_]+)\s+[^>]*?(?:val|name|value)=["']([\s\S]*?)["'][^>]*?\/>/g;
+        while ((match = scRegex.exec(content)) !== null) {
+          args[match[1]] = this.unescapeXML(match[2]);
+        }
+
         toolCalls.push({ name, args });
       }
     }
     return toolCalls;
+  }
+
+  private unescapeXML(text: string): string {
+    return text.replace(/&lt;/g, '<')
+               .replace(/&gt;/g, '>')
+               .replace(/&amp;/g, '&')
+               .replace(/&quot;/g, '"')
+               .replace(/&apos;/g, "'");
   }
 
   /**
