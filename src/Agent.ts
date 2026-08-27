@@ -44,20 +44,29 @@ export class Agent {
     if (this.config.tools.length > 0) {
       prompt += '\n\nAvailable Tools:\n';
       for (const tool of this.config.tools) {
-        prompt += `- ${tool.name}: ${tool.description}\n  Parameters: ${JSON.stringify(tool.parameters)}\n`;
+        prompt += `<tool>\n`;
+        prompt += `  <name>${tool.name}</name>\n`;
+        prompt += `  <description>${tool.description}</description>\n`;
+        prompt += `  <parameters>\n`;
+        if (tool.parameters && tool.parameters.properties) {
+          for (const [key, prop] of Object.entries(tool.parameters.properties)) {
+            const type = (prop as any).type || 'string';
+            const desc = (prop as any).description || '';
+            prompt += `    <parameter name="${key}" type="${type}">${desc}</parameter>\n`;
+          }
+        }
+        prompt += `  </parameters>\n`;
+        prompt += `</tool>\n`;
       }
       
-      prompt += `\nTo call tools, output a JSON array of tool calls inside a \`\`\`json block. 
-Example:
-\`\`\`json
-[
-  {
-    "name": "exec",
-    "args": { "code": "console.log('Hello');" }
-  }
-]
-\`\`\`
-You can call multiple tools in the same array to execute them in parallel.
+      prompt += `\nTo call tools, output XML blocks formatted exactly like this:
+<tool_call>
+  <name>tool_name</name>
+  <arguments>
+    <arg_name>arg_value</arg_name>
+  </arguments>
+</tool_call>
+You can output multiple <tool_call> blocks to execute them in parallel.
 If you call a tool, wait for the user to provide the execution results before proceeding.`;
     }
 
@@ -69,20 +78,26 @@ If you call a tool, wait for the user to provide the execution results before pr
    */
   private parseToolCalls(text: string): ToolCall[] {
     const toolCalls: ToolCall[] = [];
-    const regex = /```json\s*([\s\S]*?)\s*```/g;
+    const regex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
-      try {
-        const parsed = JSON.parse(match[1]);
-        if (Array.isArray(parsed)) {
-          for (const item of parsed) {
-            if (item && typeof item.name === 'string' && typeof item.args === 'object') {
-              toolCalls.push(item);
-            }
+      const callContent = match[1];
+      const nameMatch = callContent.match(/<name>(.*?)<\/name>/);
+      const argsMatch = callContent.match(/<arguments>([\s\S]*?)<\/arguments>/);
+      
+      if (nameMatch) {
+        const name = nameMatch[1].trim();
+        const args: Record<string, any> = {};
+        
+        if (argsMatch) {
+          const argsStr = argsMatch[1];
+          const argRegex = /<([a-zA-Z0-9_]+)>([\s\S]*?)<\/\1>/g;
+          let argMatch;
+          while ((argMatch = argRegex.exec(argsStr)) !== null) {
+            args[argMatch[1]] = argMatch[2].trim();
           }
         }
-      } catch (e) {
-        // Skip invalid JSON blocks
+        toolCalls.push({ name, args });
       }
     }
     return toolCalls;
@@ -108,6 +123,8 @@ If you call a tool, wait for the user to provide the execution results before pr
   public async run(userInput: string): Promise<string> {
     this.history.push({ role: 'user', content: userInput });
     const systemPrompt = this.buildSystemPrompt();
+    debugLog(`\n[DEBUG] --- Iteration 0 (System Prompt) ---`);
+    debugLog(systemPrompt);
 
     let iterations = 0;
     while (iterations < this.config.maxIterations!) {
