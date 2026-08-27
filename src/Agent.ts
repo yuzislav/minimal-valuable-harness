@@ -20,7 +20,7 @@ export interface AgentConfig {
 export class Agent {
   private config: AgentConfig;
   private history: Message[] = [];
-  
+
   constructor(config: AgentConfig) {
     this.config = config;
     // Default max iterations to 5, and max characters to 16,000 (~4k tokens)
@@ -33,7 +33,7 @@ export class Agent {
    */
   private buildSystemPrompt(): string {
     let prompt = this.config.systemPrompt || 'You are a helpful AI assistant.';
-    
+
     if (this.config.skills.length > 0) {
       prompt += '\n\nAvailable Skills (use the read_skill tool to see full details):\n';
       for (const skill of this.config.skills) {
@@ -58,7 +58,7 @@ export class Agent {
         prompt += `  </parameters>\n`;
         prompt += `</tool>\n`;
       }
-      
+
       prompt += `\nCRITICAL INSTRUCTIONS FOR TOOL CALLING:
 You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
 <tool_call>
@@ -70,8 +70,7 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
 
 - You MUST wrap your parameters inside an <arguments> block.
 - You MUST use <name> for the tool's name.
-- You can output multiple <tool_call> blocks to execute them in parallel.
-- Wait for the user to provide the execution results before proceeding.`;
+- You can output multiple <tool_call> blocks to execute them in parallel.`;
     }
 
     return prompt;
@@ -84,12 +83,12 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
     const toolCalls: ToolCall[] = [];
     // Model sometimes outputs <tool> or <call> instead of <tool_call>
     const blockRegex = /<(?:tool_call|tool|call)>([\s\S]*?)<\/(?:tool_call|tool|call)>/g;
-    
+
     let blockMatch;
     while ((blockMatch = blockRegex.exec(text)) !== null) {
       let content = blockMatch[1];
       let name = '';
-      
+
       const nameMatch = content.match(/<name>(.*?)<\/name>/);
       if (nameMatch) {
         name = nameMatch[1].trim();
@@ -105,16 +104,16 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
       if (name) {
         // Strip wrapper tags so they don't consume argument tags in the regex
         content = content.replace(/<\/?(?:arguments|parameters|name)[^>]*>/g, '');
-        
+
         const args: Record<string, any> = {};
-        
+
         // Match standard tags: <tag>content</tag> (robust to trailing characters in closing tag)
         const tagRegex = /<([a-zA-Z0-9_]+)[^>]*>([\s\S]*?)<\/\1[^>]*>/g;
         let match;
         while ((match = tagRegex.exec(content)) !== null) {
           args[match[1]] = this.unescapeXML(match[2].trim());
         }
-        
+
         // Match self-closing tags: <tag val="content" />
         const scRegex = /<([a-zA-Z0-9_]+)\s+[^>]*?(?:val|name|value)=["']([\s\S]*?)["'][^>]*?\/>/g;
         while ((match = scRegex.exec(content)) !== null) {
@@ -129,10 +128,10 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
 
   private unescapeXML(text: string): string {
     return text.replace(/&lt;/g, '<')
-               .replace(/&gt;/g, '>')
-               .replace(/&amp;/g, '&')
-               .replace(/&quot;/g, '"')
-               .replace(/&apos;/g, "'");
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
   }
 
   /**
@@ -165,16 +164,16 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
       debugLog(`[DEBUG] Current History:`, this.history);
 
       this.trimHistory();
-      
+
       const responseText = await this.config.provider.generate(this.history, systemPrompt);
-      
+
       debugLog(`[DEBUG] Received response from LLM (length: ${responseText.length} chars):`);
       debugLog(responseText);
 
       this.history.push({ role: 'assistant', content: responseText });
 
       const toolCalls = this.parseToolCalls(responseText);
-      
+
       debugLog(`[DEBUG] Parsed tool calls: ${toolCalls.length}`);
       if (toolCalls.length > 0) {
         debugLog(`[DEBUG] Tool calls details:`, toolCalls);

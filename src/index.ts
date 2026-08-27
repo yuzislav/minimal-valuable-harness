@@ -29,6 +29,32 @@ async function main() {
     createReadSkillTool(skills)
   ];
 
+  let activeMcpManager: any = null;
+
+  // Integrate MCP Tools if configured
+  if (process.env.MCP_SERVER_COMMAND) {
+    console.log(`[System] Initializing MCP Server with ${process.env.MCP_SERVER_COMMAND}...`);
+    try {
+      const { MCPManager } = await import('./mcp');
+      // If args are provided, we split them by space. For a robust parser, you might want to use a shell parser
+      // but for this minimal harness, a simple split or just passing the exact args works.
+      // E.g. MCP_SERVER_ARGS="-y @modelcontextprotocol/server-sqlite --db test.db"
+      const argsStr = process.env.MCP_SERVER_ARGS || "";
+      const args = argsStr ? argsStr.split(' ') : [];
+      
+      const mcpManager = new MCPManager(process.env.MCP_SERVER_COMMAND, args);
+      activeMcpManager = mcpManager;
+      
+      await mcpManager.connect();
+      const mcpTools = await mcpManager.loadTools();
+      
+      tools.push(...mcpTools);
+      console.log(`[System] Successfully loaded ${mcpTools.length} MCP tools.`);
+    } catch (err: any) {
+      console.error(`[System] Failed to initialize MCP Server: ${err.message}`);
+    }
+  }
+
   // Instantiate the encapsulated Agent class
   const agent = new Agent({
     provider,
@@ -46,6 +72,10 @@ async function main() {
   // Run the loop
   const result = await agent.run(prompt);
   console.log(`\n[Assistant] ${result}`);
+  
+  if (activeMcpManager) {
+    await activeMcpManager.disconnect();
+  }
 }
 
 main().catch(console.error);
