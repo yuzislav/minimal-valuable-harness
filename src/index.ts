@@ -8,6 +8,65 @@ import { curlTool } from './tools/curl';
 import { weatherTool } from './tools/weather';
 import { loadSkills, createReadSkillTool } from './skills';
 
+const COMMANDS = [
+  { name: '/exit', description: 'Exit the application' },
+  { name: '/quit', description: 'Exit the application' },
+  { name: '/clear', description: 'Clear the agent context/history' },
+  { name: '/debug', description: 'Toggle debug logging' },
+  { name: '/history', description: 'Show full conversation history' },
+  { name: '/help', description: 'Show available commands' },
+  { name: '/skills', description: 'Show available skills' },
+  { name: '/tools', description: 'Show available tools' }
+];
+
+function processCommand(
+  command: string,
+  agent: Agent,
+  skills: any[],
+  tools: any[]
+): boolean {
+  if (command === '/exit' || command === '/quit') {
+    return true;
+  } else if (command === '/clear') {
+    agent.clearHistory();
+    console.log('[System]: Context cleared. Started a new session.');
+  } else if (command === '/debug') {
+    process.env.DEBUG = process.env.DEBUG ? '' : 'true';
+    console.log(`[System]: Debug logging is now ${process.env.DEBUG ? 'ON' : 'OFF'}.`);
+  } else if (command === '/history') {
+    const history = agent.getHistory();
+    if (history.length === 0) {
+      console.log('\n[System]: History is empty.');
+    } else {
+      console.log('\n[System]: Full Conversation History:');
+      history.forEach((msg, idx) => {
+        console.log(`\n--- Message ${idx + 1} (${msg.role}) ---`);
+        console.log(msg.content);
+      });
+    }
+  } else if (command === '/help') {
+    console.log('\nAvailable commands:');
+    COMMANDS.forEach(c => console.log(`  ${c.name.padEnd(10)} - ${c.description}`));
+  } else if (command === '/skills') {
+    if (skills.length === 0) {
+      console.log('\n[System]: No skills available.');
+    } else {
+      console.log('\nAvailable skills:');
+      skills.forEach(s => console.log(`  ${s.name.padEnd(20)} - ${s.description}`));
+    }
+  } else if (command === '/tools') {
+    if (tools.length === 0) {
+      console.log('\n[System]: No tools available.');
+    } else {
+      console.log('\nAvailable tools:');
+      tools.forEach(t => console.log(`  ${t.name.padEnd(20)} - ${t.description}`));
+    }
+  } else {
+    console.log(`[System]: Unknown command: ${command}. Type /help for available commands.`);
+  }
+  return false;
+}
+
 async function main() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -89,17 +148,6 @@ async function main() {
     console.log(`\n[Assistant]: ${result}`);
   }
 
-  const COMMANDS = [
-    { name: '/exit', description: 'Exit the application' },
-    { name: '/quit', description: 'Exit the application' },
-    { name: '/clear', description: 'Clear the agent context/history' },
-    { name: '/debug', description: 'Toggle debug logging' },
-    { name: '/history', description: 'Show full conversation history' },
-    { name: '/help', description: 'Show available commands' },
-    { name: '/skills', description: 'Show available skills' },
-    { name: '/tools', description: 'Show available tools' }
-  ];
-
   const completer = (line: string) => {
     const commandNames = COMMANDS.map(c => c.name);
     if (line.startsWith('/')) {
@@ -157,52 +205,9 @@ async function main() {
     
     if (userInput.startsWith('/')) {
       const command = userInput.trim().toLowerCase();
-      if (command === '/exit' || command === '/quit') {
-        break;
-      } else if (command === '/clear') {
-        agent.clearHistory();
-        console.log('[System]: Context cleared. Started a new session.');
-        continue;
-      } else if (command === '/debug') {
-        process.env.DEBUG = process.env.DEBUG ? '' : 'true';
-        console.log(`[System]: Debug logging is now ${process.env.DEBUG ? 'ON' : 'OFF'}.`);
-        continue;
-      } else if (command === '/history') {
-        const history = agent.getHistory();
-        if (history.length === 0) {
-          console.log('\n[System]: History is empty.');
-        } else {
-          console.log('\n[System]: Full Conversation History:');
-          history.forEach((msg, idx) => {
-            console.log(`\n--- Message ${idx + 1} (${msg.role}) ---`);
-            console.log(msg.content);
-          });
-        }
-        continue;
-      } else if (command === '/help') {
-        console.log('\nAvailable commands:');
-        COMMANDS.forEach(c => console.log(`  ${c.name.padEnd(10)} - ${c.description}`));
-        continue;
-      } else if (command === '/skills') {
-        if (skills.length === 0) {
-          console.log('\n[System]: No skills available.');
-        } else {
-          console.log('\nAvailable skills:');
-          skills.forEach(s => console.log(`  ${s.name.padEnd(20)} - ${s.description}`));
-        }
-        continue;
-      } else if (command === '/tools') {
-        if (tools.length === 0) {
-          console.log('\n[System]: No tools available.');
-        } else {
-          console.log('\nAvailable tools:');
-          tools.forEach(t => console.log(`  ${t.name.padEnd(20)} - ${t.description}`));
-        }
-        continue;
-      } else {
-        console.log(`[System]: Unknown command: ${command}. Type /help for available commands.`);
-        continue;
-      }
+      const shouldExit = processCommand(command, agent, skills, tools);
+      if (shouldExit) break;
+      continue;
     }
 
     if (!userInput.trim()) continue;
