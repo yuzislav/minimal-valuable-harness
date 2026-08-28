@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import * as path from 'path';
-import * as readline from 'readline';
 import { GeminiProvider } from './Provider';
+import { TerminalUI } from './TerminalUI';
 import { Agent } from './Agent';
 import { execTool } from './tools/exec';
 import { curlTool } from './tools/curl';
@@ -119,58 +119,6 @@ async function runInitialPrompt(agent: Agent) {
   }
 }
 
-function setupConsole(commandsList: any[]) {
-  const completer = (line: string) => {
-    const commandNames = commandsList.map(c => c.name);
-    if (line.startsWith('/')) {
-      const hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
-      return [hits.length ? hits : commandNames, line];
-    }
-    return [[], line];
-  };
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    completer
-  });
-
-  const originalRefreshLine = (rl as any)._refreshLine;
-  if (originalRefreshLine) {
-    (rl as any)._refreshLine = function() {
-      originalRefreshLine.call(this);
-      
-      const line = this.line;
-      if (line && line.startsWith('/') && this.cursor === line.length) {
-        const commandNames = commandsList.map(c => c.name);
-        const hit = commandNames.find((c) => c.startsWith(line.toLowerCase()));
-        
-        if (hit && hit.length > line.length) {
-          const suggestion = hit.slice(line.length);
-          this.output.write(`\x1b[90m${suggestion}\x1b[0m`);
-          readline.moveCursor(this.output, -suggestion.length, 0);
-        }
-      }
-    };
-
-    process.stdin.on('keypress', () => {
-      setImmediate(() => {
-        if ((rl as any).line && (rl as any).line.startsWith('/')) {
-          (rl as any)._refreshLine();
-        }
-      });
-    });
-  }
-
-  const askQuestion = (query: string): Promise<string> => {
-    return new Promise(resolve => rl.question(query, resolve));
-  };
-
-  const closeConsole = () => rl.close();
-
-  return { askQuestion, closeConsole };
-}
-
 async function main() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -208,10 +156,10 @@ async function main() {
 
   await runInitialPrompt(agent);
 
-  const { askQuestion, closeConsole } = setupConsole(COMMANDS);
+  const terminal = new TerminalUI(COMMANDS);
 
   while (true) {
-    const userInput = await askQuestion('\n[User]: ');
+    const userInput = await terminal.askQuestion('\n[User]: ');
     
     if (userInput.startsWith('/')) {
       const command = userInput.trim().toLowerCase();
@@ -226,7 +174,7 @@ async function main() {
     console.log(`\n[Assistant]: ${result}`);
   }
 
-  closeConsole();
+  terminal.close();
 
   for (const manager of activeMcpManagers) {
     await manager.disconnect();
