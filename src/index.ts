@@ -95,7 +95,8 @@ async function main() {
     { name: '/clear', description: 'Clear the agent context/history' },
     { name: '/debug', description: 'Toggle debug logging' },
     { name: '/history', description: 'Show full conversation history' },
-    { name: '/help', description: 'Show available commands' }
+    { name: '/help', description: 'Show available commands' },
+    { name: '/skills', description: 'Show available skills' }
   ];
 
   const completer = (line: string) => {
@@ -180,6 +181,14 @@ async function main() {
       } else if (command === '/help') {
         console.log('\nAvailable commands:');
         COMMANDS.forEach(c => console.log(`  ${c.name.padEnd(10)} - ${c.description}`));
+        continue;
+      } else if (command === '/skills') {
+        if (skills.length === 0) {
+          console.log('\n[System]: No skills available.');
+        } else {
+          console.log('\nAvailable skills:');
+          skills.forEach(s => console.log(`  ${s.name.padEnd(20)} - ${s.description}`));
+        }
         continue;
       } else {
         console.log(`[System]: Unknown command: ${command}. Type /help for available commands.`);
