@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { Message, Provider } from './types';
+import { Message, Provider } from '../types';
 
 async function withRetry<T>(
   operation: () => Promise<T>,

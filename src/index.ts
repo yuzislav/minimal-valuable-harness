@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import * as path from 'path';
-import { GeminiProvider } from './Provider';
+import { GeminiProvider } from './providers/GeminiProvider';
+import { LocalProvider } from './providers/LocalProvider';
 import { TerminalUI } from './TerminalUI';
 import { Agent } from './Agent';
 import { execTool } from './tools/exec';
@@ -104,14 +105,21 @@ async function runInitialPrompt(agent: Agent) {
 }
 
 async function main() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("Please set GEMINI_API_KEY in your environment or .env file.");
-    process.exit(1);
-  }
+  const providerType = process.env.LLM_PROVIDER?.toLowerCase() || 'gemini';
+  let provider;
 
-  // Initialize our abstraction layer provider
-  const provider = new GeminiProvider(apiKey);
+  if (providerType === 'local') {
+    provider = new LocalProvider();
+    console.log('[System] Initialized LocalProvider.');
+  } else {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("Please set GEMINI_API_KEY in your environment or .env file to use Gemini (or set LLM_PROVIDER=local).");
+      process.exit(1);
+    }
+    provider = new GeminiProvider(apiKey);
+    console.log('[System] Initialized GeminiProvider.');
+  }
 
   // Load skills from a 'skills' folder
   const skillsDir = path.join(__dirname, '..', 'skills');
