@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
-import { Tool } from './types';
+import { Tool } from '../types';
 
 export interface Skill {
   name: string;

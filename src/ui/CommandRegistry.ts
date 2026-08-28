@@ -1,4 +1,4 @@
-import { Agent } from '../harness/Agent';
+import { Agent } from '../harness/core/Agent';
 
 export interface CommandContext {
   agent: Agent;

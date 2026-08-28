@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { Agent } from '../harness/Agent';
+import { Agent } from '../harness/core/Agent';
 import { CommandRegistry, CommandContext } from './CommandRegistry';
 
 export class TelegramUI {

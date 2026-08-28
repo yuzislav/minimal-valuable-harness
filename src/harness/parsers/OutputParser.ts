@@ -1,4 +1,4 @@
-import { ToolCall } from './types';
+import { ToolCall } from '../types';
 
 export class OutputParser {
   /**

@@ -1,7 +1,7 @@
-import { Message, Provider, Tool, ToolCall } from './types';
-import { Skill } from './skills';
-import { ConversationMemory } from './ConversationMemory';
-import { OutputParser } from './OutputParser';
+import { Message, Provider, Tool, ToolCall } from '../types';
+import { Skill } from '../skills';
+import { ConversationMemory } from '../memory/ConversationMemory';
+import { OutputParser } from '../parsers/OutputParser';
 
 const debugLog = (...args: any[]) => {
   if (process.env.DEBUG) {
@@ -116,7 +116,7 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
         return responseText;
       }
 
-      const toolResults = await Promise.all(toolCalls.map(async (call) => {
+      const toolResults = await Promise.all(toolCalls.map(async (call: ToolCall) => {
         const tool = this.config.tools.find(t => t.name === call.name);
         if (!tool) {
           return { call, error: `Tool '${call.name}' not found.` };

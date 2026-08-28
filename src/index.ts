@@ -4,12 +4,12 @@ import { GeminiProvider } from './harness/providers/GeminiProvider';
 import { LocalProvider } from './harness/providers/LocalProvider';
 import { TerminalUI } from './ui/TerminalUI';
 import { TelegramUI } from './ui/TelegramUI';
-import { Agent } from './harness/Agent';
+import { Agent } from './harness/core/Agent';
 import { execTool } from './harness/tools/exec';
 import { curlTool } from './harness/tools/curl';
 import { weatherTool } from './harness/tools/weather';
 import { loadSkills, createReadSkillTool } from './harness/skills';
-import { loadMCPServers } from './harness/MCPLoader';
+import { loadMCPServers } from './harness/mcp/MCPLoader';
 import { CommandRegistry, CommandContext } from './ui/CommandRegistry';
 
 const registry = new CommandRegistry();
@@ -53,7 +53,7 @@ registry.register({
       reply('\n[System]: History is empty.');
     } else {
       let output = '\n[System]: Full Conversation History:\n';
-      history.forEach((msg, idx) => {
+      history.forEach((msg: any, idx: number) => {
         output += `\n--- Message ${idx + 1} (${msg.role}) ---\n${msg.content}\n`;
       });
       reply(output);

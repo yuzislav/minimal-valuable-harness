@@ -1,4 +1,4 @@
-import { Message } from './types';
+import { Message, Provider, Tool, ToolCall } from '../types';
 
 export class ConversationMemory {
   private history: Message[] = [];

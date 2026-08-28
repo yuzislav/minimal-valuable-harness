@@ -9,7 +9,7 @@ export async function loadMCPServers(tools: any[]): Promise<any[]> {
       console.log(`[System] Found mcp.json at ${mcpConfigPath}, loading servers...`);
       const mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf8'));
       if (mcpConfig.mcpServers) {
-        const { MCPManager } = await import('./mcp');
+        const { MCPManager } = await import('./index');
         for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
           console.log(`[System] Initializing MCP Server '${serverName}' from mcp.json...`);
           try {
