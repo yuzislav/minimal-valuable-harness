@@ -40,6 +40,7 @@ npm start "What is the weather in Tokyo?"
 Inside the interactive session, you have access to several slash commands:
 - `/help` - Show available commands
 - `/skills` - Show available skills and their descriptions
+- `/tools` - Show available tools and their descriptions
 - `/clear` - Clear the agent context/history
 - `/history` - Show full conversation history
 - `/debug` - Toggle debug logging

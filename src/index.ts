@@ -96,7 +96,8 @@ async function main() {
     { name: '/debug', description: 'Toggle debug logging' },
     { name: '/history', description: 'Show full conversation history' },
     { name: '/help', description: 'Show available commands' },
-    { name: '/skills', description: 'Show available skills' }
+    { name: '/skills', description: 'Show available skills' },
+    { name: '/tools', description: 'Show available tools' }
   ];
 
   const completer = (line: string) => {
@@ -188,6 +189,14 @@ async function main() {
         } else {
           console.log('\nAvailable skills:');
           skills.forEach(s => console.log(`  ${s.name.padEnd(20)} - ${s.description}`));
+        }
+        continue;
+      } else if (command === '/tools') {
+        if (tools.length === 0) {
+          console.log('\n[System]: No tools available.');
+        } else {
+          console.log('\nAvailable tools:');
+          tools.forEach(t => console.log(`  ${t.name.padEnd(20)} - ${t.description}`));
         }
         continue;
       } else {
