@@ -57,9 +57,16 @@ This transparency makes `minimal-valuable-harness` an excellent educational reso
 
 ### MCP Support
 
-To run the harness with an MCP server, set the `MCP_SERVER_COMMAND` and `MCP_SERVER_ARGS` environment variables before starting.
-
-For example, to run with the SQLite MCP server:
-```bash
-MCP_SERVER_COMMAND="npx" MCP_SERVER_ARGS="-y @modelcontextprotocol/server-sqlite --db test.db" npm start
+To run the harness with MCP servers, create an `mcp.json` file in the root directory:
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "mcp-sqlite-server", "test.db"],
+      "env": {}
+    }
+  }
+}
 ```
+The harness will automatically detect this file and load all configured servers.

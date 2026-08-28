@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-sqlite-server",
+        "test.db"
+      ],
+      "env": {}
+    }
+  }
+}

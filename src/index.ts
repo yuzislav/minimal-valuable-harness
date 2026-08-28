@@ -30,30 +30,45 @@ async function main() {
     createReadSkillTool(skills)
   ];
 
-  let activeMcpManager: any = null;
+  const activeMcpManagers: any[] = [];
 
-  // Integrate MCP Tools if configured
-  if (process.env.MCP_SERVER_COMMAND) {
-    console.log(`[System] Initializing MCP Server with ${process.env.MCP_SERVER_COMMAND}...`);
-    try {
-      const { MCPManager } = await import('./mcp');
-      // If args are provided, we split them by space. For a robust parser, you might want to use a shell parser
-      // but for this minimal harness, a simple split or just passing the exact args works.
-      // E.g. MCP_SERVER_ARGS="-y @modelcontextprotocol/server-sqlite --db test.db"
-      const argsStr = process.env.MCP_SERVER_ARGS || "";
-      const args = argsStr ? argsStr.split(' ') : [];
+  try {
+    const fs = await import('fs');
+    const mcpConfigPath = path.resolve(process.cwd(), 'mcp.json');
+    if (fs.existsSync(mcpConfigPath)) {
+      console.log(`[System] Found mcp.json at ${mcpConfigPath}, loading servers...`);
+      const mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf8'));
+      if (mcpConfig.mcpServers) {
+        const { MCPManager } = await import('./mcp');
+        for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
+          console.log(`[System] Initializing MCP Server '${serverName}' from mcp.json...`);
+          try {
+            const config = serverConfig as any;
+            const command = config.command;
+            const args = config.args || [];
+            const env = config.env;
 
-      const mcpManager = new MCPManager(process.env.MCP_SERVER_COMMAND, args);
-      activeMcpManager = mcpManager;
+            if (!command) {
+              console.warn(`[System] Server '${serverName}' is missing 'command', skipping.`);
+              continue;
+            }
 
-      await mcpManager.connect();
-      const mcpTools = await mcpManager.loadTools();
+            const mcpManager = new MCPManager(command, args, env);
+            activeMcpManagers.push(mcpManager);
 
-      tools.push(...mcpTools);
-      console.log(`[System] Successfully loaded ${mcpTools.length} MCP tools.`);
-    } catch (err: any) {
-      console.error(`[System] Failed to initialize MCP Server: ${err.message}`);
+            await mcpManager.connect();
+            const mcpTools = await mcpManager.loadTools();
+
+            tools.push(...mcpTools);
+            console.log(`[System] Successfully loaded ${mcpTools.length} MCP tools from '${serverName}'.`);
+          } catch (err: any) {
+            console.error(`[System] Failed to initialize MCP Server '${serverName}': ${err.message}`);
+          }
+        }
+      }
     }
+  } catch (err: any) {
+    console.error(`[System] Failed to parse mcp.json: ${err.message}`);
   }
 
   // Instantiate the encapsulated Agent class
@@ -180,8 +195,8 @@ async function main() {
 
   rl.close();
 
-  if (activeMcpManager) {
-    await activeMcpManager.disconnect();
+  for (const manager of activeMcpManagers) {
+    await manager.disconnect();
   }
 }
 

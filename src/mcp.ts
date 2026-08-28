@@ -6,10 +6,11 @@ export class MCPManager {
   private client: Client;
   private transport: StdioClientTransport;
 
-  constructor(command: string, args: string[]) {
+  constructor(command: string, args: string[], env?: Record<string, string>) {
     this.transport = new StdioClientTransport({
       command,
       args,
+      env,
     });
     
     this.client = new Client({
