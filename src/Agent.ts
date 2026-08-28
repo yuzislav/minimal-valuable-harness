@@ -36,6 +36,13 @@ export class Agent {
   }
 
   /**
+   * Returns the agent's current conversation history.
+   */
+  public getHistory(): Message[] {
+    return this.history;
+  }
+
+  /**
    * Generates the system prompt including skills and tools.
    */
   private buildSystemPrompt(): string {

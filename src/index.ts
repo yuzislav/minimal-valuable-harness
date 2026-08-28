@@ -78,6 +78,8 @@ async function main() {
     { name: '/exit', description: 'Exit the application' },
     { name: '/quit', description: 'Exit the application' },
     { name: '/clear', description: 'Clear the agent context/history' },
+    { name: '/debug', description: 'Toggle debug logging' },
+    { name: '/history', description: 'Show full conversation history' },
     { name: '/help', description: 'Show available commands' }
   ];
 
@@ -96,6 +98,39 @@ async function main() {
     completer
   });
 
+  // Monkey-patch _refreshLine to add inline ghost text for commands
+  const originalRefreshLine = (rl as any)._refreshLine;
+  if (originalRefreshLine) {
+    (rl as any)._refreshLine = function() {
+      // Call the original method to render the prompt and current input
+      originalRefreshLine.call(this);
+      
+      const line = this.line;
+      // Only show ghost text if typing a command and cursor is at the end
+      if (line && line.startsWith('/') && this.cursor === line.length) {
+        const commandNames = COMMANDS.map(c => c.name);
+        const hit = commandNames.find((c) => c.startsWith(line.toLowerCase()));
+        
+        if (hit && hit.length > line.length) {
+          const suggestion = hit.slice(line.length);
+          // \x1b[90m is gray/dim, \x1b[0m resets color
+          this.output.write(`\x1b[90m${suggestion}\x1b[0m`);
+          // Move the cursor back to where the user is actually typing
+          readline.moveCursor(this.output, -suggestion.length, 0);
+        }
+      }
+    };
+
+    // Force refresh on keypress because readline optimizes simple appends and doesn't call _refreshLine
+    process.stdin.on('keypress', () => {
+      setImmediate(() => {
+        if ((rl as any).line && (rl as any).line.startsWith('/')) {
+          (rl as any)._refreshLine();
+        }
+      });
+    });
+  }
+
   const askQuestion = (query: string): Promise<string> => {
     return new Promise(resolve => rl.question(query, resolve));
   };
@@ -110,6 +145,22 @@ async function main() {
       } else if (command === '/clear') {
         agent.clearHistory();
         console.log('[System]: Context cleared. Started a new session.');
+        continue;
+      } else if (command === '/debug') {
+        process.env.DEBUG = process.env.DEBUG ? '' : 'true';
+        console.log(`[System]: Debug logging is now ${process.env.DEBUG ? 'ON' : 'OFF'}.`);
+        continue;
+      } else if (command === '/history') {
+        const history = agent.getHistory();
+        if (history.length === 0) {
+          console.log('\n[System]: History is empty.');
+        } else {
+          console.log('\n[System]: Full Conversation History:');
+          history.forEach((msg, idx) => {
+            console.log(`\n--- Message ${idx + 1} (${msg.role}) ---`);
+            console.log(msg.content);
+          });
+        }
         continue;
       } else if (command === '/help') {
         console.log('\nAvailable commands:');

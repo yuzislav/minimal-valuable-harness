@@ -16,11 +16,11 @@ export function loadSkills(skillsDir: string): Skill[] {
   }
 
   const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
-  
+
   for (const file of files) {
     const filePath = path.join(skillsDir, file);
     const content = fs.readFileSync(filePath, 'utf-8');
-    
+
     // Parse frontmatter
     const match = content.match(/^---\n([\s\S]*?)\n---/);
     if (match) {
