@@ -29,6 +29,13 @@ export class Agent {
   }
 
   /**
+   * Clears the agent's conversation history.
+   */
+  public clearHistory(): void {
+    this.history = [];
+  }
+
+  /**
    * Generates the system prompt including skills and tools.
    */
   private buildSystemPrompt(): string {
