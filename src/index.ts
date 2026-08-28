@@ -67,30 +67,8 @@ function processCommand(
   return false;
 }
 
-async function main() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("Please set GEMINI_API_KEY in your environment or .env file.");
-    process.exit(1);
-  }
-
-  // Initialize our abstraction layer provider
-  const provider = new GeminiProvider(apiKey);
-
-  // Load skills from a 'skills' folder
-  const skillsDir = path.join(__dirname, '..', 'skills');
-  const skills = loadSkills(skillsDir);
-
-  // Define tools available to the Agent
-  const tools = [
-    execTool,
-    curlTool,
-    weatherTool,
-    createReadSkillTool(skills)
-  ];
-
+async function loadMCPServers(tools: any[]): Promise<any[]> {
   const activeMcpManagers: any[] = [];
-
   try {
     const fs = await import('fs');
     const mcpConfigPath = path.resolve(process.cwd(), 'mcp.json');
@@ -129,27 +107,21 @@ async function main() {
   } catch (err: any) {
     console.error(`[System] Failed to parse mcp.json: ${err.message}`);
   }
+  return activeMcpManagers;
+}
 
-  // Instantiate the encapsulated Agent class
-  const agent = new Agent({
-    provider,
-    tools,
-    skills,
-    systemPrompt: 'You are a helpful and educational AI assistant running in a minimal harness. Make use of your available tools.',
-    // Optional: override via config or ENV
-    maxIterations: 5,
-    maxContextChars: 16000
-  });
-
+async function runInitialPrompt(agent: Agent) {
   const initialPrompt = process.argv[2];
   if (initialPrompt) {
     console.log(`[User]: ${initialPrompt}\n`);
     const result = await agent.run(initialPrompt);
     console.log(`\n[Assistant]: ${result}`);
   }
+}
 
+function setupConsole(commandsList: any[]) {
   const completer = (line: string) => {
-    const commandNames = COMMANDS.map(c => c.name);
+    const commandNames = commandsList.map(c => c.name);
     if (line.startsWith('/')) {
       const hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
       return [hits.length ? hits : commandNames, line];
@@ -163,30 +135,24 @@ async function main() {
     completer
   });
 
-  // Monkey-patch _refreshLine to add inline ghost text for commands
   const originalRefreshLine = (rl as any)._refreshLine;
   if (originalRefreshLine) {
     (rl as any)._refreshLine = function() {
-      // Call the original method to render the prompt and current input
       originalRefreshLine.call(this);
       
       const line = this.line;
-      // Only show ghost text if typing a command and cursor is at the end
       if (line && line.startsWith('/') && this.cursor === line.length) {
-        const commandNames = COMMANDS.map(c => c.name);
+        const commandNames = commandsList.map(c => c.name);
         const hit = commandNames.find((c) => c.startsWith(line.toLowerCase()));
         
         if (hit && hit.length > line.length) {
           const suggestion = hit.slice(line.length);
-          // \x1b[90m is gray/dim, \x1b[0m resets color
           this.output.write(`\x1b[90m${suggestion}\x1b[0m`);
-          // Move the cursor back to where the user is actually typing
           readline.moveCursor(this.output, -suggestion.length, 0);
         }
       }
     };
 
-    // Force refresh on keypress because readline optimizes simple appends and doesn't call _refreshLine
     process.stdin.on('keypress', () => {
       setImmediate(() => {
         if ((rl as any).line && (rl as any).line.startsWith('/')) {
@@ -199,6 +165,50 @@ async function main() {
   const askQuestion = (query: string): Promise<string> => {
     return new Promise(resolve => rl.question(query, resolve));
   };
+
+  const closeConsole = () => rl.close();
+
+  return { askQuestion, closeConsole };
+}
+
+async function main() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("Please set GEMINI_API_KEY in your environment or .env file.");
+    process.exit(1);
+  }
+
+  // Initialize our abstraction layer provider
+  const provider = new GeminiProvider(apiKey);
+
+  // Load skills from a 'skills' folder
+  const skillsDir = path.join(__dirname, '..', 'skills');
+  const skills = loadSkills(skillsDir);
+
+  // Define tools available to the Agent
+  const tools = [
+    execTool,
+    curlTool,
+    weatherTool,
+    createReadSkillTool(skills)
+  ];
+
+  const activeMcpManagers = await loadMCPServers(tools);
+
+  // Instantiate the encapsulated Agent class
+  const agent = new Agent({
+    provider,
+    tools,
+    skills,
+    systemPrompt: 'You are a helpful and educational AI assistant running in a minimal harness. Make use of your available tools.',
+    // Optional: override via config or ENV
+    maxIterations: 5,
+    maxContextChars: 16000
+  });
+
+  await runInitialPrompt(agent);
+
+  const { askQuestion, closeConsole } = setupConsole(COMMANDS);
 
   while (true) {
     const userInput = await askQuestion('\n[User]: ');
@@ -216,7 +226,7 @@ async function main() {
     console.log(`\n[Assistant]: ${result}`);
   }
 
-  rl.close();
+  closeConsole();
 
   for (const manager of activeMcpManagers) {
     await manager.disconnect();
