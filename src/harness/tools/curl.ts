@@ -32,9 +32,14 @@ export const curlTool: Tool = {
     }
 
     try {
+      let headers = args.headers || {};
+      if (typeof headers === 'string') {
+        try { headers = JSON.parse(headers); } catch (e) {}
+      }
+
       const options: RequestInit = {
         method: args.method || 'GET',
-        headers: args.headers || {},
+        headers: headers,
       };
       
       if (args.body) {
