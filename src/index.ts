@@ -1,15 +1,15 @@
 import 'dotenv/config';
 import * as path from 'path';
-import { GeminiProvider } from './providers/GeminiProvider';
-import { LocalProvider } from './providers/LocalProvider';
-import { TerminalUI } from './TerminalUI';
-import { Agent } from './Agent';
-import { execTool } from './tools/exec';
-import { curlTool } from './tools/curl';
-import { weatherTool } from './tools/weather';
-import { loadSkills, createReadSkillTool } from './skills';
-import { loadMCPServers } from './MCPLoader';
-import { CommandRegistry, CommandContext } from './CLI';
+import { GeminiProvider } from './harness/providers/GeminiProvider';
+import { LocalProvider } from './harness/providers/LocalProvider';
+import { TerminalUI } from './ui/TerminalUI';
+import { Agent } from './harness/Agent';
+import { execTool } from './harness/tools/exec';
+import { curlTool } from './harness/tools/curl';
+import { weatherTool } from './harness/tools/weather';
+import { loadSkills, createReadSkillTool } from './harness/skills';
+import { loadMCPServers } from './harness/MCPLoader';
+import { CommandRegistry, CommandContext } from './ui/CLI';
 
 const registry = new CommandRegistry();
 
