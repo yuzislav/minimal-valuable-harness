@@ -4,7 +4,7 @@ import { ConversationMemory } from '../memory/ConversationMemory';
 import { OutputParser } from '../parsers/OutputParser';
 
 const debugLog = (...args: any[]) => {
-  if (process.env.DEBUG) {
+  if (process.env.DEBUG && process.env.DEBUG !== 'false') {
     const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ');
     console.log(`\x1b[90m${message}\x1b[0m`);
   }

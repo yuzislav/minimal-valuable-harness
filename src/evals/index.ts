@@ -27,7 +27,7 @@ async function runAllEvals() {
     }
     ProviderClass = class extends GeminiProvider {
       constructor() {
-        super(apiKey);
+        super(apiKey as string);
       }
     };
   }
