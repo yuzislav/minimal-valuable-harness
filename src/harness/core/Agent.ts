@@ -2,6 +2,7 @@ import { Message, Provider, Tool, ToolCall } from '../types';
 import { Skill } from '../skills';
 import { ConversationMemory } from '../memory/ConversationMemory';
 import { OutputParser } from '../parsers/OutputParser';
+import { buildSystemPrompt } from '../utils/promptBuilder';
 
 const debugLog = (...args: any[]) => {
   if (process.env.DEBUG && process.env.DEBUG !== 'false') {
@@ -41,54 +42,13 @@ export class Agent {
     return this.memory.getHistory();
   }
 
-  private buildSystemPrompt(): string {
-    let prompt = this.config.systemPrompt || 'You are a helpful AI assistant.';
-
-    if (this.config.skills.length > 0) {
-      prompt += '\n\nAvailable Skills (use the read_skill tool to see full details):\n';
-      for (const skill of this.config.skills) {
-        prompt += `- ${skill.name}: ${skill.description}\n`;
-      }
-    }
-
-    if (this.config.tools.length > 0) {
-      prompt += '\n\nAvailable Tools:\n';
-      for (const tool of this.config.tools) {
-        prompt += `<tool>\n`;
-        prompt += `  <name>${tool.name}</name>\n`;
-        prompt += `  <description>${tool.description}</description>\n`;
-        prompt += `  <parameters>\n`;
-        if (tool.parameters && tool.parameters.properties) {
-          for (const [key, prop] of Object.entries(tool.parameters.properties)) {
-            const type = (prop as any).type || 'string';
-            const desc = (prop as any).description || '';
-            prompt += `    <parameter name="${key}" type="${type}">${desc}</parameter>\n`;
-          }
-        }
-        prompt += `  </parameters>\n`;
-        prompt += `</tool>\n`;
-      }
-
-      prompt += `\nCRITICAL INSTRUCTIONS FOR TOOL CALLING:
-You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
-<tool_call>
-  <name>tool_name</name>
-  <arguments>
-    <arg_name>arg_value</arg_name>
-  </arguments>
-</tool_call>
-
-- You MUST wrap your parameters inside an <arguments> block.
-- You MUST use <name> for the tool's name.
-- You can output multiple <tool_call> blocks to execute them in parallel.`;
-    }
-
-    return prompt;
-  }
-
   public async run(userInput: string): Promise<string> {
     this.memory.addMessage({ role: 'user', content: userInput });
-    const systemPrompt = this.buildSystemPrompt();
+    const systemPrompt = buildSystemPrompt(
+      this.config.systemPrompt || 'You are a helpful AI assistant.', 
+      this.config.skills, 
+      this.config.tools
+    );
     debugLog(`\n[DEBUG] --- Iteration 0 (System Prompt) ---`);
     debugLog(systemPrompt);
 
