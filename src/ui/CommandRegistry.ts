@@ -4,12 +4,13 @@ export interface CommandContext {
   agent: Agent;
   skills: any[];
   tools: any[];
+  reply: (text: string) => void | Promise<void>;
 }
 
 export interface Command {
   name: string;
   description: string;
-  execute: (context: CommandContext) => boolean | void;
+  execute: (context: CommandContext) => boolean | void | Promise<boolean | void>;
 }
 
 export class CommandRegistry {
@@ -23,13 +24,13 @@ export class CommandRegistry {
     return Array.from(this.commands.values());
   }
 
-  public process(commandName: string, context: CommandContext): boolean {
+  public async process(commandName: string, context: CommandContext): Promise<boolean> {
     const command = this.commands.get(commandName);
     if (command) {
-      const shouldExit = command.execute(context);
+      const shouldExit = await command.execute(context);
       return shouldExit === true;
     } else {
-      console.log(`[System]: Unknown command: ${commandName}. Type /help for available commands.`);
+      await context.reply(`[System]: Unknown command: ${commandName}. Type /help for available commands.`);
       return false;
     }
   }

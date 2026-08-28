@@ -23,7 +23,11 @@ A minimal, yet powerful, harness for building and testing agentic workflows.
    GEMINI_API_KEY=your_api_key_here
    ```
 
-### Running the CLI
+### Running the Application
+
+By default, the application runs in Terminal mode. You can also run it as a Telegram bot.
+
+#### Terminal Mode
 
 Start the interactive CLI:
 ```bash
@@ -32,7 +36,16 @@ npm start
 
 You can also pass an initial prompt directly:
 ```bash
-npm start "What is the weather in Tokyo?"
+npm start -- "What is the weather in Tokyo?"
+```
+
+#### Telegram Bot Mode
+
+To run the harness as a Telegram bot, ensure you have set `TELEGRAM_BOT_TOKEN` in your `.env` file. You can also optionally restrict access by providing a comma-separated list of usernames or User IDs in `TELEGRAM_ALLOWED_USERS`.
+
+Start the bot using the `--ui telegram` flag:
+```bash
+npm start -- --ui telegram
 ```
 
 ### CLI Commands
