@@ -1,5 +1,13 @@
 import * as readline from 'readline';
 
+// Define an interface for internal readline properties to avoid `any` casts
+interface InternalReadline extends readline.Interface {
+  _refreshLine?: () => void;
+  line: string;
+  cursor: number;
+  output: NodeJS.WritableStream & { write: (str: string) => boolean };
+}
+
 export class TerminalUI {
   private rl: readline.Interface;
 
@@ -19,28 +27,32 @@ export class TerminalUI {
       completer
     });
 
-    const originalRefreshLine = (this.rl as any)._refreshLine;
+    const rlInternal = this.rl as unknown as InternalReadline;
+    const originalRefreshLine = rlInternal._refreshLine;
+
     if (originalRefreshLine) {
-      (this.rl as any)._refreshLine = () => {
+      rlInternal._refreshLine = () => {
         originalRefreshLine.call(this.rl);
         
-        const line = (this.rl as any).line;
-        if (line && line.startsWith('/') && (this.rl as any).cursor === line.length) {
+        const line = rlInternal.line;
+        if (line && line.startsWith('/') && rlInternal.cursor === line.length) {
           const commandNames = this.commandsList.map(c => c.name);
           const hit = commandNames.find((c) => c.startsWith(line.toLowerCase()));
           
           if (hit && hit.length > line.length) {
             const suggestion = hit.slice(line.length);
-            (this.rl as any).output.write(`\x1b[90m${suggestion}\x1b[0m`);
-            readline.moveCursor((this.rl as any).output, -suggestion.length, 0);
+            rlInternal.output.write(`\x1b[90m${suggestion}\x1b[0m`);
+            readline.moveCursor(rlInternal.output, -suggestion.length, 0);
           }
         }
       };
 
       process.stdin.on('keypress', () => {
         setImmediate(() => {
-          if ((this.rl as any).line && (this.rl as any).line.startsWith('/')) {
-            (this.rl as any)._refreshLine();
+          if (rlInternal.line && rlInternal.line.startsWith('/')) {
+            if (rlInternal._refreshLine) {
+              rlInternal._refreshLine();
+            }
           }
         });
       });

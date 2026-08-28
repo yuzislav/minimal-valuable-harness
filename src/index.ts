@@ -7,33 +7,45 @@ import { execTool } from './tools/exec';
 import { curlTool } from './tools/curl';
 import { weatherTool } from './tools/weather';
 import { loadSkills, createReadSkillTool } from './skills';
+import { loadMCPServers } from './MCPLoader';
+import { CommandRegistry, CommandContext } from './CLI';
 
-const COMMANDS = [
-  { name: '/exit', description: 'Exit the application' },
-  { name: '/quit', description: 'Exit the application' },
-  { name: '/clear', description: 'Clear the agent context/history' },
-  { name: '/debug', description: 'Toggle debug logging' },
-  { name: '/history', description: 'Show full conversation history' },
-  { name: '/help', description: 'Show available commands' },
-  { name: '/skills', description: 'Show available skills' },
-  { name: '/tools', description: 'Show available tools' }
-];
+const registry = new CommandRegistry();
 
-function processCommand(
-  command: string,
-  agent: Agent,
-  skills: any[],
-  tools: any[]
-): boolean {
-  if (command === '/exit' || command === '/quit') {
-    return true;
-  } else if (command === '/clear') {
+registry.register({
+  name: '/exit',
+  description: 'Exit the application',
+  execute: () => true
+});
+
+registry.register({
+  name: '/quit',
+  description: 'Exit the application',
+  execute: () => true
+});
+
+registry.register({
+  name: '/clear',
+  description: 'Clear the agent context/history',
+  execute: ({ agent }) => {
     agent.clearHistory();
     console.log('[System]: Context cleared. Started a new session.');
-  } else if (command === '/debug') {
+  }
+});
+
+registry.register({
+  name: '/debug',
+  description: 'Toggle debug logging',
+  execute: () => {
     process.env.DEBUG = process.env.DEBUG ? '' : 'true';
     console.log(`[System]: Debug logging is now ${process.env.DEBUG ? 'ON' : 'OFF'}.`);
-  } else if (command === '/history') {
+  }
+});
+
+registry.register({
+  name: '/history',
+  description: 'Show full conversation history',
+  execute: ({ agent }) => {
     const history = agent.getHistory();
     if (history.length === 0) {
       console.log('\n[System]: History is empty.');
@@ -44,71 +56,43 @@ function processCommand(
         console.log(msg.content);
       });
     }
-  } else if (command === '/help') {
+  }
+});
+
+registry.register({
+  name: '/help',
+  description: 'Show available commands',
+  execute: () => {
     console.log('\nAvailable commands:');
-    COMMANDS.forEach(c => console.log(`  ${c.name.padEnd(10)} - ${c.description}`));
-  } else if (command === '/skills') {
+    registry.getCommands().forEach(c => console.log(`  ${c.name.padEnd(10)} - ${c.description}`));
+  }
+});
+
+registry.register({
+  name: '/skills',
+  description: 'Show available skills',
+  execute: ({ skills }) => {
     if (skills.length === 0) {
       console.log('\n[System]: No skills available.');
     } else {
       console.log('\nAvailable skills:');
       skills.forEach(s => console.log(`  ${s.name.padEnd(20)} - ${s.description}`));
     }
-  } else if (command === '/tools') {
+  }
+});
+
+registry.register({
+  name: '/tools',
+  description: 'Show available tools',
+  execute: ({ tools }) => {
     if (tools.length === 0) {
       console.log('\n[System]: No tools available.');
     } else {
       console.log('\nAvailable tools:');
       tools.forEach(t => console.log(`  ${t.name.padEnd(20)} - ${t.description}`));
     }
-  } else {
-    console.log(`[System]: Unknown command: ${command}. Type /help for available commands.`);
   }
-  return false;
-}
-
-async function loadMCPServers(tools: any[]): Promise<any[]> {
-  const activeMcpManagers: any[] = [];
-  try {
-    const fs = await import('fs');
-    const mcpConfigPath = path.resolve(process.cwd(), 'mcp.json');
-    if (fs.existsSync(mcpConfigPath)) {
-      console.log(`[System] Found mcp.json at ${mcpConfigPath}, loading servers...`);
-      const mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf8'));
-      if (mcpConfig.mcpServers) {
-        const { MCPManager } = await import('./mcp');
-        for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
-          console.log(`[System] Initializing MCP Server '${serverName}' from mcp.json...`);
-          try {
-            const config = serverConfig as any;
-            const command = config.command;
-            const args = config.args || [];
-            const env = config.env;
-
-            if (!command) {
-              console.warn(`[System] Server '${serverName}' is missing 'command', skipping.`);
-              continue;
-            }
-
-            const mcpManager = new MCPManager(command, args, env);
-            activeMcpManagers.push(mcpManager);
-
-            await mcpManager.connect();
-            const mcpTools = await mcpManager.loadTools();
-
-            tools.push(...mcpTools);
-            console.log(`[System] Successfully loaded ${mcpTools.length} MCP tools from '${serverName}'.`);
-          } catch (err: any) {
-            console.error(`[System] Failed to initialize MCP Server '${serverName}': ${err.message}`);
-          }
-        }
-      }
-    }
-  } catch (err: any) {
-    console.error(`[System] Failed to parse mcp.json: ${err.message}`);
-  }
-  return activeMcpManagers;
-}
+});
 
 async function runInitialPrompt(agent: Agent) {
   const initialPrompt = process.argv[2];
@@ -131,7 +115,7 @@ async function main() {
 
   // Load skills from a 'skills' folder
   const skillsDir = path.join(__dirname, '..', 'skills');
-  const skills = loadSkills(skillsDir);
+  const skills = await loadSkills(skillsDir);
 
   // Define tools available to the Agent
   const tools = [
@@ -156,14 +140,16 @@ async function main() {
 
   await runInitialPrompt(agent);
 
-  const terminal = new TerminalUI(COMMANDS);
+  const terminal = new TerminalUI(registry.getCommands());
+
+  const context: CommandContext = { agent, skills, tools };
 
   while (true) {
     const userInput = await terminal.askQuestion('\n[User]: ');
     
     if (userInput.startsWith('/')) {
       const command = userInput.trim().toLowerCase();
-      const shouldExit = processCommand(command, agent, skills, tools);
+      const shouldExit = registry.process(command, context);
       if (shouldExit) break;
       continue;
     }

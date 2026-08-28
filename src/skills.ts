@@ -1,4 +1,5 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { Tool } from './types';
@@ -9,33 +10,36 @@ export interface Skill {
   content: string;
 }
 
-export function loadSkills(skillsDir: string): Skill[] {
+function parseFrontmatter(content: string): any {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return null;
+  return yaml.parse(match[1]);
+}
+
+export async function loadSkills(skillsDir: string): Promise<Skill[]> {
   const skills: Skill[] = [];
-  if (!fs.existsSync(skillsDir)) {
+  if (!existsSync(skillsDir)) {
     return skills;
   }
 
-  const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
+  const files = await fs.readdir(skillsDir);
+  const mdFiles = files.filter(f => f.endsWith('.md'));
 
-  for (const file of files) {
+  for (const file of mdFiles) {
     const filePath = path.join(skillsDir, file);
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = await fs.readFile(filePath, 'utf-8');
 
-    // Parse frontmatter
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
-    if (match) {
-      try {
-        const frontmatter = yaml.parse(match[1]);
-        if (frontmatter.name && frontmatter.description) {
-          skills.push({
-            name: frontmatter.name,
-            description: frontmatter.description,
-            content
-          });
-        }
-      } catch (e) {
-        console.error(`Error parsing frontmatter in ${file}:`, e);
+    try {
+      const frontmatter = parseFrontmatter(content);
+      if (frontmatter && frontmatter.name && frontmatter.description) {
+        skills.push({
+          name: frontmatter.name,
+          description: frontmatter.description,
+          content
+        });
       }
+    } catch (e) {
+      console.error(`Error parsing frontmatter in ${file}:`, e);
     }
   }
   return skills;
