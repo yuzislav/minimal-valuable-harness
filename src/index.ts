@@ -131,13 +131,20 @@ async function main() {
   const activeMcpManagers = await loadMCPServers(tools);
 
   const createAgent = () => {
+    let maxContextChars = 16000;
+    if (providerType === 'local') {
+      maxContextChars = parseInt(process.env.LOCAL_CONTEXT_LENGTH || '16000', 10);
+    } else {
+      maxContextChars = parseInt(process.env.GEMINI_CONTEXT_LENGTH || '2000000', 10);
+    }
+
     return new Agent({
       provider,
       tools,
       skills,
       systemPrompt: 'You are a helpful and educational AI assistant running in a minimal harness. Make use of your available tools.',
       maxIterations: 5,
-      maxContextChars: 16000
+      maxContextChars
     });
   };
 
