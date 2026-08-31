@@ -33,11 +33,24 @@ export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent):
         passed++;
       } else {
         console.log(`\x1b[31m  ✗ FAILED\x1b[0m${errorMsg ? ` - ${errorMsg}` : ''}`);
+        console.log(`    \x1b[90mRequest:\x1b[0m ${testCase.input}`);
+        console.log(`    \x1b[90mResponse:\x1b[0m ${response}`);
         failed++;
       }
     } catch (err: any) {
       console.log(`\x1b[31m  ✗ ERROR\x1b[0m - Execution threw: ${err.message}`);
       failed++;
+    }
+
+    // Wait based on RPM limit between cases to avoid rate limits
+    // Skip wait for local models which don't have rate limits
+    if (testCase !== suite.cases[suite.cases.length - 1] && process.env.LLM_PROVIDER?.toLowerCase() !== 'local') {
+      const rpmLimit = parseInt(process.env.GEMINI_RPM_LIMIT || '15', 10);
+      const waitMs = rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
+      if (waitMs > 0) {
+        console.log(`\x1b[90m  Waiting ${waitMs}ms to respect ${rpmLimit} RPM limit...\x1b[0m`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
     }
   }
 

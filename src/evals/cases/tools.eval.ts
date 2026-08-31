@@ -38,10 +38,22 @@ export const toolsEvalSuite: EvalSuite = {
       assert: ({ toolCalls }) => {
         const weatherCalls = toolCalls.filter(call => call.name === 'weather');
         if (weatherCalls.length < 2) return { passed: false, error: 'Weather tool was not called multiple times' };
-        
+
         const cities = weatherCalls.map(c => c.args.cityName?.toLowerCase() || '');
         if (!cities.some(c => c.includes('rome')) || !cities.some(c => c.includes('madrid'))) {
           return { passed: false, error: `Did not check both Rome and Madrid. Cities checked: ${cities.join(', ')}` };
+        }
+        return { passed: true };
+      }
+    },
+
+    {
+      name: 'Weather Tool Check - No City Provided',
+      input: 'Check the weather?',
+      assert: ({ toolCalls }) => {
+        const weatherCall = toolCalls.find(call => call.name === 'weather');
+        if (weatherCall) {
+          return { passed: false, error: `Weather tool should not be called when no city is provided, but it was called with: ${JSON.stringify(weatherCall.args)}` };
         }
         return { passed: true };
       }
@@ -67,7 +79,7 @@ export const toolsEvalSuite: EvalSuite = {
       assert: ({ response, toolCalls }) => {
         const execCall = toolCalls.find(call => call.name === 'exec');
         if (!execCall) return { passed: false, error: 'Exec tool was not called' };
-        
+
         const answer = (12345 * 67890).toString();
         if (!response.replace(/,/g, '').includes(answer)) {
           return { passed: false, error: `Response does not contain the correct answer: ${answer}` };
@@ -81,7 +93,7 @@ export const toolsEvalSuite: EvalSuite = {
       assert: ({ response, toolCalls }) => {
         const execCall = toolCalls.find(call => call.name === 'exec');
         if (!execCall) return { passed: false, error: 'Exec tool was not called' };
-        
+
         const currentYear = new Date().getFullYear().toString();
         if (!response.includes(currentYear)) {
           return { passed: false, error: `Response does not contain current year ${currentYear}` };
@@ -100,7 +112,7 @@ export const toolsEvalSuite: EvalSuite = {
         if (!curlCall.args.url?.includes('httpbin.org/get')) {
           return { passed: false, error: `Wrong URL: ${curlCall.args.url}` };
         }
-        
+
         if (!response.includes('https://httpbin.org/get')) {
           return { passed: false, error: 'Response does not contain the extracted url field' };
         }
@@ -115,7 +127,7 @@ export const toolsEvalSuite: EvalSuite = {
         if (!curlCall) return { passed: false, error: 'Curl tool was not called' };
         if (curlCall.args.method !== 'POST') return { passed: false, error: `Wrong method: ${curlCall.args.method}` };
         if (!curlCall.args.body?.includes('test')) return { passed: false, error: `Wrong body: ${curlCall.args.body}` };
-        
+
         if (!response.includes('test')) {
           return { passed: false, error: 'Response does not contain the expected data' };
         }
@@ -128,7 +140,7 @@ export const toolsEvalSuite: EvalSuite = {
       assert: ({ response, toolCalls }) => {
         const curlCall = toolCalls.find(call => call.name === 'curl');
         if (!curlCall) return { passed: false, error: 'Curl tool was not called' };
-        
+
         let headers = curlCall.args.headers || {};
         if (typeof headers === 'string') {
           try {
@@ -137,7 +149,7 @@ export const toolsEvalSuite: EvalSuite = {
             // keep it as string if parsing fails, but check it
           }
         }
-        
+
         let headerKeys: string[] = [];
         if (typeof headers === 'object' && !Array.isArray(headers)) {
           headerKeys = Object.keys(headers).map(k => k.toLowerCase());
@@ -147,11 +159,11 @@ export const toolsEvalSuite: EvalSuite = {
           // If the LLM returned an array like [["X-My-Header", "Hello"]]
           headerKeys = headers.map(h => (Array.isArray(h) ? h[0] : JSON.stringify(h)).toLowerCase());
         }
-        
+
         if (!headerKeys.some(k => k.includes('x-my-header'))) {
           return { passed: false, error: `Custom header not passed. Headers: ${JSON.stringify(curlCall.args.headers)}` };
         }
-        
+
         if (!response.toLowerCase().includes('hello')) {
           return { passed: false, error: 'Response does not mention the header value' };
         }
