@@ -59,15 +59,14 @@ async function runAllEvals() {
       tools: [...baseTools],
       skills,
       systemPrompt: 'You are a helpful and educational AI assistant running in a minimal harness. Make use of your available tools.',
-      maxIterations: 10,
       maxContextChars: 1000000,
     });
 
   // Suite registry — add new suites here
   const allSuites: Array<{ name: string; run: () => Promise<number> }> = [
-    { name: 'tools',  run: () => runEvalSuite(toolsEvalSuite,   createAgent) },
-    { name: 'skills', run: () => runEvalSuite(skillsEvalSuite,  createAgent) },
-    { name: 'shop',   run: () => runEvalSuite(shopMcpEvalSuite, createAgent) },
+    { name: 'tools', run: () => runEvalSuite(toolsEvalSuite, createAgent) },
+    { name: 'skills', run: () => runEvalSuite(skillsEvalSuite, createAgent) },
+    { name: 'shop', run: () => runEvalSuite(shopMcpEvalSuite, createAgent) },
   ];
 
   const suitesToRun = suiteArg
