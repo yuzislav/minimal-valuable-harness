@@ -21,12 +21,6 @@ registry.register({
 });
 
 registry.register({
-  name: '/quit',
-  description: 'Exit the application',
-  execute: () => true
-});
-
-registry.register({
   name: '/clear',
   description: 'Clear the agent context/history',
   execute: ({ agent, reply }) => {
@@ -39,8 +33,10 @@ registry.register({
   name: '/debug',
   description: 'Toggle debug logging',
   execute: ({ reply }) => {
-    process.env.DEBUG = process.env.DEBUG ? '' : 'true';
-    reply(`[System]: Debug logging is now ${process.env.DEBUG ? 'ON' : 'OFF'}.`);
+    const isCurrentlyOn = process.env.DEBUG && process.env.DEBUG !== 'false';
+    const newState = !isCurrentlyOn;
+    process.env.DEBUG = newState ? 'true' : 'false';
+    reply(`[System]: Debug logging is now ${newState ? 'ON' : 'OFF'}.`);
   }
 });
 

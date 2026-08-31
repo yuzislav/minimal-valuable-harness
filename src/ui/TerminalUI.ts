@@ -15,8 +15,11 @@ export class TerminalUI {
     const completer = (line: string) => {
       const commandNames = this.commandsList.map(c => c.name);
       if (line.startsWith('/')) {
-        const hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
-        return [hits.length ? hits : commandNames, line];
+        let hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
+        if (line === '/' && hits.includes('/help')) {
+          hits = ['/help', ...hits.filter(h => h !== '/help')];
+        }
+        return [hits.length ? [hits[0]] : commandNames, line];
       }
       return [[], line];
     };
@@ -37,7 +40,11 @@ export class TerminalUI {
         const line = rlInternal.line;
         if (line && line.startsWith('/') && rlInternal.cursor === line.length) {
           const commandNames = this.commandsList.map(c => c.name);
-          const hit = commandNames.find((c) => c.startsWith(line.toLowerCase()));
+          let hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
+          if (line === '/' && hits.includes('/help')) {
+            hits = ['/help', ...hits.filter(h => h !== '/help')];
+          }
+          const hit = hits[0];
           
           if (hit && hit.length > line.length) {
             const suggestion = hit.slice(line.length);
