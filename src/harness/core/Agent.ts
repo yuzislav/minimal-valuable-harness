@@ -85,22 +85,31 @@ export class Agent {
       });
       debugLog(`[DEBUG] Current History:`, debugHistory);
 
-      const responseText = await this.config.provider.generate(this.memory.getHistory(), systemPrompt);
-      await rpmDelay();
+      let responseText: string;
+      try {
+        responseText = await this.config.provider.generate(this.memory.getHistory(), systemPrompt);
+        await rpmDelay();
+      } catch (error: any) {
+        debugLog(`[DEBUG] Provider generation error:`, error);
+        return `Error communicating with the LLM provider: ${error.message || String(error)}`;
+      }
 
       debugLog(`[DEBUG] Received response from LLM (length: ${responseText.length} chars):`);
       debugLog(responseText);
 
       this.memory.addMessage({ role: 'assistant', content: responseText });
 
-      const toolCalls = this.parser.parseToolCalls(responseText);
+      const { calls: toolCalls, errors: parseErrors } = this.parser.parseToolCalls(responseText);
 
       debugLog(`[DEBUG] Parsed tool calls: ${toolCalls.length}`);
       if (toolCalls.length > 0) {
         debugLog(`[DEBUG] Tool calls details:`, toolCalls);
       }
+      if (parseErrors.length > 0) {
+        debugLog(`[DEBUG] Parse errors:`, parseErrors);
+      }
 
-      if (toolCalls.length === 0) {
+      if (toolCalls.length === 0 && parseErrors.length === 0) {
         return responseText;
       }
 
@@ -117,14 +126,21 @@ export class Agent {
         }
       }));
 
-      let resultMessage = 'Tool execution results:\n';
-      for (const res of toolResults) {
-        resultMessage += `\nTool: ${res.call.name}\n`;
-        if (res.error) {
-          resultMessage += `Error: ${res.error}\n`;
-        } else {
-          const resultStr = JSON.stringify(res.result, null, 2);
-          resultMessage += `Result: ${resultStr}\n`;
+      let resultMessage = '';
+      if (parseErrors.length > 0) {
+        resultMessage += `Validation Errors in your tool calls:\n${parseErrors.join('\n')}\n\nPlease correct these errors and try again.\n`;
+      }
+
+      if (toolCalls.length > 0) {
+        resultMessage += 'Tool execution results:\n';
+        for (const res of toolResults) {
+          resultMessage += `\nTool: ${res.call.name}\n`;
+          if (res.error) {
+            resultMessage += `Error: ${res.error}\n`;
+          } else {
+            const resultStr = JSON.stringify(res.result, null, 2);
+            resultMessage += `Result: ${resultStr}\n`;
+          }
         }
       }
 

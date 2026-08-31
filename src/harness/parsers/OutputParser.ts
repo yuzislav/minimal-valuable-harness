@@ -1,49 +1,90 @@
 import { ToolCall } from '../types';
 
+export interface ParseResult {
+  calls: ToolCall[];
+  errors: string[];
+}
+
 export class OutputParser {
   /**
    * Extracts tool calls from the LLM's raw text response.
+   * Validates against the expected schema and returns meaningful errors if invalid.
    */
-  public parseToolCalls(text: string): ToolCall[] {
-    const toolCalls: ToolCall[] = [];
-    const blockRegex = /<(?:tool_call|tool|call)>([\s\S]*?)<\/(?:tool_call|tool|call)>/g;
+  public parseToolCalls(text: string): ParseResult {
+    const calls: ToolCall[] = [];
+    const errors: string[] = [];
 
+    // Catch old/invalid tags
+    const oldBlockRegex = /<(tool|call)>[\s\S]*?<\/\1>/g;
+    if (oldBlockRegex.test(text)) {
+      errors.push("Invalid tool call tag. Use <tool_call> instead of <tool> or <call>.");
+    }
+
+    const blockRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
     let blockMatch;
     while ((blockMatch = blockRegex.exec(text)) !== null) {
-      let content = blockMatch[1];
-      let name = '';
+      const content = blockMatch[1];
+      const nameMatch = content.match(/<name>([\s\S]*?)<\/name>/);
+      const argsMatch = content.match(/<arguments>([\s\S]*?)<\/arguments>/);
 
-      const nameMatch = content.match(/<name>(.*?)<\/name>/);
-      if (nameMatch) {
-        name = nameMatch[1].trim();
-      } else {
-        const firstTagMatch = content.match(/<([a-zA-Z0-9_]+)>([\s\S]*?)<\/\1[^>]*>/);
-        if (firstTagMatch && !['arguments', 'parameters', 'name'].includes(firstTagMatch[1])) {
-          name = firstTagMatch[1].trim();
-          content = firstTagMatch[2];
-        }
+      if (!nameMatch) {
+        errors.push("Missing or invalid <name> tag inside <tool_call>. Expected format:\n<tool_call>\n  <name>tool_name</name>\n  <arguments>...</arguments>\n</tool_call>");
+        continue;
       }
 
-      if (name) {
-        content = content.replace(/<\/?(?:arguments|parameters|name)[^>]*>/g, '');
+      const name = nameMatch[1].trim();
+      if (!name) {
+        errors.push("The <name> tag is empty inside <tool_call>.");
+        continue;
+      }
 
-        const args: Record<string, any> = {};
+      const args: Record<string, any> = {};
 
-        const tagRegex = /<([a-zA-Z0-9_]+)[^>]*>([\s\S]*?)<\/\1[^>]*>/g;
+      if (argsMatch) {
+        const argsContent = argsMatch[1];
+        const tagRegex = /<([a-zA-Z0-9_\-]+)>([\s\S]*?)<\/\1>/g;
         let match;
-        while ((match = tagRegex.exec(content)) !== null) {
-          args[match[1]] = this.unescapeXML(match[2].trim());
+        let parsedAny = false;
+        
+        while ((match = tagRegex.exec(argsContent)) !== null) {
+          parsedAny = true;
+          const argName = match[1];
+          const argValue = match[2].trim();
+          
+          if (/<[a-zA-Z0-9_\-]+>/.test(argValue)) {
+            errors.push(`Argument <${argName}> contains nested XML tags. Complex types like objects or arrays must be passed as JSON-encoded strings, not nested XML tags.`);
+          }
+
+          if ((argValue.startsWith('{') && argValue.endsWith('}')) || (argValue.startsWith('[') && argValue.endsWith(']'))) {
+            try {
+              JSON.parse(argValue);
+            } catch (e: any) {
+              errors.push(`Argument <${argName}> looks like JSON but is invalid. Ensure it is a properly escaped JSON string. Error: ${e.message}`);
+            }
+          }
+
+          args[argName] = this.unescapeXML(argValue);
         }
 
-        const scRegex = /<([a-zA-Z0-9_]+)\s+[^>]*?(?:val|name|value)=["']([\s\S]*?)["'][^>]*?\/>/g;
-        while ((match = scRegex.exec(content)) !== null) {
-          args[match[1]] = this.unescapeXML(match[2]);
+        if (!parsedAny && argsContent.trim().length > 0) {
+          errors.push(`Invalid arguments format for tool '${name}'. Expected <arg_name>arg_value</arg_name> inside <arguments>.`);
+          continue;
         }
-
-        toolCalls.push({ name, args });
       }
+
+      calls.push({ name, args });
     }
-    return toolCalls;
+
+    // Catch unclosed or completely malformed tool calls that failed to match the blockRegex
+    const openTags = (text.match(/<tool_call>/g) || []).length;
+    const closeTags = (text.match(/<\/tool_call>/g) || []).length;
+    if (openTags !== closeTags) {
+      errors.push("Found unclosed or mismatched <tool_call> tags. Please ensure every <tool_call> is properly closed with </tool_call>.");
+    } else if (openTags > 0 && calls.length === 0 && errors.length === 0) {
+      errors.push("Found <tool_call> tag but failed to parse it. Ensure it follows the expected schema with <name> and <arguments>.");
+    }
+
+    return { calls, errors };
   }
 
   private unescapeXML(text: string): string {

@@ -41,6 +41,7 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
 
 - You MUST wrap your parameters inside an <arguments> block.
 - You MUST use <name> for the tool's name.
+- For object or array parameters, output a JSON-encoded string. Do NOT use nested XML tags.
 - You can output multiple <tool_call> blocks to execute them in parallel.`;
   }
 

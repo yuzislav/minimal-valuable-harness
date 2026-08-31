@@ -21,7 +21,7 @@ export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent):
       const llmIterations = agent.lastRunIterations;
       const toolCalls = history
         .filter(m => m.role === 'assistant')
-        .flatMap(m => parser.parseToolCalls(m.content));
+        .flatMap(m => parser.parseToolCalls(m.content).calls);
 
       const context: EvalContext = { response, agent, toolCalls };
 
