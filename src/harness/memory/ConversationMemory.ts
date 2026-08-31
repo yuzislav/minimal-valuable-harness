@@ -36,7 +36,7 @@ export class ConversationMemory {
     const beforeLength = this.history.length;
     this.history = this.strategy.trim(this.history, this.maxContextChars);
     if (this.history.length < beforeLength) {
-      debugLog(`[DEBUG] Context trimmed. Removed ${beforeLength - this.history.length} messages to fit within ${this.maxContextChars} chars.`);
+      debugLog(`[DEBUG] ❗ Context trimmed. Removed ${beforeLength - this.history.length} messages to fit within ${this.maxContextChars} chars.`);
     }
   }
 

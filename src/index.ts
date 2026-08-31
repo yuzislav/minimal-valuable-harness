@@ -25,7 +25,7 @@ registry.register({
   description: 'Clear the agent context/history',
   execute: ({ agent, reply }) => {
     agent.clearHistory();
-    reply('[System]: Context cleared. Started a new session.');
+    reply('\x1b[33m[System]: Context cleared. Started a new session.\x1b[0m');
   }
 });
 
@@ -36,7 +36,7 @@ registry.register({
     const isCurrentlyOn = process.env.DEBUG && process.env.DEBUG !== 'false';
     const newState = !isCurrentlyOn;
     process.env.DEBUG = newState ? 'true' : 'false';
-    reply(`[System]: Debug logging is now ${newState ? 'ON' : 'OFF'}.`);
+    reply(`\x1b[33m[System]: Debug logging is now ${newState ? 'ON' : 'OFF'}.\x1b[0m`);
   }
 });
 
@@ -46,9 +46,9 @@ registry.register({
   execute: ({ agent, reply }) => {
     const history = agent.getHistory();
     if (history.length === 0) {
-      reply('\n[System]: History is empty.');
+      reply('\n\x1b[33m[System]: History is empty.\x1b[0m');
     } else {
-      let output = '\n[System]: Full Conversation History:\n';
+      let output = '\n\x1b[33m[System]: Full Conversation History:\x1b[0m\n';
       history.forEach((msg: any, idx: number) => {
         output += `\n--- Message ${idx + 1} (${msg.role}) ---\n${msg.content}\n`;
       });
@@ -72,7 +72,7 @@ registry.register({
   description: 'Show available skills',
   execute: ({ skills, reply }) => {
     if (skills.length === 0) {
-      reply('\n[System]: No skills available.');
+      reply('\n\x1b[33m[System]: No skills available.\x1b[0m');
     } else {
       let output = '\nAvailable skills:\n';
       skills.forEach(s => output += `  ${s.name.padEnd(20)} - ${s.description}\n`);
@@ -86,7 +86,7 @@ registry.register({
   description: 'Show available tools',
   execute: ({ tools, reply }) => {
     if (tools.length === 0) {
-      reply('\n[System]: No tools available.');
+      reply('\n\x1b[33m[System]: No tools available.\x1b[0m');
     } else {
       let output = '\nAvailable tools:\n';
       tools.forEach(t => output += `  ${t.name.padEnd(20)} - ${t.description}\n`);
@@ -103,7 +103,7 @@ registry.register({
     const size = history.reduce((sum, msg) => sum + msg.content.length, 0);
     const maxChars = agent.maxContextChars;
     const percentage = ((size / maxChars) * 100).toFixed(2);
-    reply(`\\n[System]: Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.`);
+    reply(`\n\x1b[33m[System]: Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.\x1b[0m`);
   }
 });
 
@@ -113,7 +113,7 @@ async function main() {
 
   if (providerType === 'local') {
     provider = new LocalProvider();
-    console.log('[System] Initialized LocalProvider.');
+    console.log('\x1b[33m[System] Initialized LocalProvider.\x1b[0m');
   } else {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -121,7 +121,7 @@ async function main() {
       process.exit(1);
     }
     provider = new GeminiProvider(apiKey);
-    console.log('[System] Initialized GeminiProvider.');
+    console.log('\x1b[33m[System] Initialized GeminiProvider.\x1b[0m');
   }
 
   // Load skills from a 'skills' folder

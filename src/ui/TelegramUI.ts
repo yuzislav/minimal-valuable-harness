@@ -24,7 +24,7 @@ export class TelegramUI {
     if (allowed) {
       allowed.split(',').forEach(user => this.allowedUsers.add(user.trim()));
     } else {
-      console.warn('[System]: TELEGRAM_ALLOWED_USERS is not set. The bot will accept messages from ANY user.');
+      console.warn('\x1b[33m[System]: TELEGRAM_ALLOWED_USERS is not set. The bot will accept messages from ANY user.\x1b[0m');
     }
 
     this.setupListeners();
@@ -91,7 +91,9 @@ export class TelegramUI {
           skills: this.skills,
           tools: this.tools,
           reply: async (text: string) => {
-            await this.bot.sendMessage(chatId, text);
+            // Strip ANSI codes before sending to Telegram
+            const strippedText = text.replace(/\x1b\[[0-9;]*m/g, '');
+            await this.bot.sendMessage(chatId, strippedText);
           }
         };
 

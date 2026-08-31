@@ -30,7 +30,7 @@ export class CommandRegistry {
       const shouldExit = await command.execute(context);
       return shouldExit === true;
     } else {
-      await context.reply(`[System]: Unknown command: ${commandName}. Type /help for available commands.`);
+      await context.reply(`\x1b[33m[System]: Unknown command: ${commandName}. Type /help for available commands.\x1b[0m`);
       return false;
     }
   }
