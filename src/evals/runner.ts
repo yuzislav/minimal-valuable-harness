@@ -2,12 +2,20 @@ import { Agent } from '../harness/core/Agent';
 import { EvalSuite, EvalContext, EvalResult } from './types';
 import { OutputParser } from '../harness/parsers/OutputParser';
 
-export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent): Promise<number> {
+export interface SuiteResult {
+  suiteName: string;
+  passed: number;
+  failed: number;
+  failures: Array<{ testName: string; errorMsg?: string }>;
+}
+
+export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent): Promise<SuiteResult> {
   console.log(`\n\x1b[36mRunning Test Suite: ${suite.name}\x1b[0m`);
   console.log('='.repeat(50));
 
   let passed = 0;
   let failed = 0;
+  const failures: Array<{ testName: string; errorMsg?: string }> = [];
   const parser = new OutputParser();
 
   for (const testCase of suite.cases) {
@@ -37,10 +45,12 @@ export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent):
         console.log(`    \x1b[90mRequest:\x1b[0m ${testCase.input}`);
         console.log(`    \x1b[90mResponse:\x1b[0m ${response}`);
         failed++;
+        failures.push({ testName: testCase.name, errorMsg });
       }
     } catch (err: any) {
       console.log(`\x1b[31m  ✗ ERROR\x1b[0m - Execution threw: ${err.message}`);
       failed++;
+      failures.push({ testName: testCase.name, errorMsg: err.message });
     }
 
     // Wait based on RPM limit between cases to avoid rate limits
@@ -62,5 +72,5 @@ export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent):
   console.log(`Total:  ${passed + failed}`);
   console.log('='.repeat(50));
 
-  return failed;
+  return { suiteName: suite.name, passed, failed, failures };
 }

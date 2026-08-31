@@ -11,7 +11,7 @@ import { weatherTool } from './harness/tools/weather';
 import { loadSkills, createReadSkillTool } from './harness/skills';
 import { loadMCPServers } from './harness/mcp/MCPLoader';
 import { CommandRegistry, CommandContext } from './ui/CommandRegistry';
-
+import * as fs from 'fs';
 const registry = new CommandRegistry();
 
 registry.register({
@@ -146,11 +146,13 @@ async function main() {
       maxContextChars = parseInt(process.env.GEMINI_CONTEXT_LENGTH || '2000000', 10);
     }
 
+    const systemPromptTemplate = fs.readFileSync(path.join(__dirname, 'systemPrompt.md'), 'utf-8');
+
     return new Agent({
       provider,
       tools,
       skills,
-      systemPrompt: 'You are a helpful and educational AI assistant running in a minimal harness. Make use of your available tools.',
+      systemPrompt: systemPromptTemplate,
       maxIterations: 5,
       maxContextChars
     });

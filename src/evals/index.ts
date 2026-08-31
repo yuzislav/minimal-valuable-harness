@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+import * as fs from 'fs';
 import * as path from 'path';
 import { runEvalSuite } from './runner';
 import { toolsEvalSuite } from './cases/tools.eval';
@@ -52,18 +53,20 @@ async function runAllEvals() {
   // Load MCP servers (needed for shop-mcp evals)
   const mcpManagers = await loadMCPServers(baseTools);
 
+  const systemPromptTemplate = fs.readFileSync(path.join(__dirname, '..', 'systemPrompt.md'), 'utf-8');
+
   // Same config as src/index.ts — evals must test the real agent, not a tuned one
   const createAgent = () =>
     new Agent({
       provider: new ProviderClass(),
       tools: [...baseTools],
       skills,
-      systemPrompt: 'You are a helpful and educational AI assistant running in a minimal harness. Make use of your available tools.',
+      systemPrompt: systemPromptTemplate,
       maxContextChars: 1000000,
     });
 
   // Suite registry — add new suites here
-  const allSuites: Array<{ name: string; run: () => Promise<number> }> = [
+  const allSuites: Array<{ name: string; run: () => Promise<any> }> = [
     { name: 'tools', run: () => runEvalSuite(toolsEvalSuite, createAgent) },
     { name: 'skills', run: () => runEvalSuite(skillsEvalSuite, createAgent) },
     { name: 'shop', run: () => runEvalSuite(shopMcpEvalSuite, createAgent) },
@@ -78,9 +81,12 @@ async function runAllEvals() {
     process.exit(1);
   }
 
+  const allSuiteResults = [];
   let totalFailures = 0;
   for (const suite of suitesToRun) {
-    totalFailures += await suite.run();
+    const result = await suite.run();
+    allSuiteResults.push(result);
+    totalFailures += result.failed;
   }
 
   // Cleanup MCP connections
@@ -88,9 +94,26 @@ async function runAllEvals() {
     await manager.disconnect();
   }
 
+  // Print Summary
+  console.log('\n' + '='.repeat(60));
+  console.log('\x1b[36m                   EVALUATION SUMMARY\x1b[0m');
+  console.log('='.repeat(60));
+  for (const res of allSuiteResults) {
+    const total = res.passed + res.failed;
+    console.log(`\x1b[1mSuite: ${res.suiteName}\x1b[0m - \x1b[32m${res.passed} passed\x1b[0m, \x1b[31m${res.failed} failed\x1b[0m (Total: ${total})`);
+    for (const failure of res.failures) {
+      console.log(`  \x1b[31m✗\x1b[0m ${failure.testName}${failure.errorMsg ? `\n    \x1b[90mError:\x1b[0m ${failure.errorMsg}` : ''}`);
+    }
+    if (res.failures.length > 0) console.log();
+  }
+  console.log('='.repeat(60));
+
   if (totalFailures > 0) {
     console.log(`\n\x1b[31mEval execution failed with ${totalFailures} total failed tests.\x1b[0m`);
     process.exit(1);
+  } else {
+    console.log(`\n\x1b[32mAll evaluations passed successfully!\x1b[0m`);
+    process.exit(0);
   }
 }
 

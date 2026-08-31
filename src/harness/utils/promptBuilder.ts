@@ -2,48 +2,37 @@ import { Tool } from '../types';
 import { Skill } from '../skills';
 
 export function buildSystemPrompt(basePrompt: string, skills: Skill[], tools: Tool[]): string {
-  let prompt = basePrompt || 'You are a helpful AI assistant.';
-  prompt += `\n\nCurrent Date: ${new Date().toISOString()}`;
+  let prompt = basePrompt || 'You are a helpful AI assistant.\n\nCurrent Date: {current_date}\n\n{available_skills}\n\n{available_tools}';
 
+  let skillsList = '';
   if (skills.length > 0) {
-    prompt += '\n\nAvailable Skills (use the read_skill tool to see full details):\n';
     for (const skill of skills) {
-      prompt += `- ${skill.name}: ${skill.description}\n`;
+      skillsList += `- ${skill.name}: ${skill.description}\n`;
     }
   }
 
+  let toolsList = '';
   if (tools.length > 0) {
-    prompt += '\n\nAvailable Tools:\n';
     for (const tool of tools) {
-      prompt += `<tool>\n`;
-      prompt += `  <name>${tool.name}</name>\n`;
-      prompt += `  <description>${tool.description}</description>\n`;
-      prompt += `  <parameters>\n`;
+      toolsList += `<tool>\n`;
+      toolsList += `  <name>${tool.name}</name>\n`;
+      toolsList += `  <description>${tool.description}</description>\n`;
+      toolsList += `  <parameters>\n`;
       if (tool.parameters && tool.parameters.properties) {
         for (const [key, prop] of Object.entries(tool.parameters.properties)) {
           const type = (prop as any).type || 'string';
           const desc = (prop as any).description || '';
-          prompt += `    <parameter name="${key}" type="${type}">${desc}</parameter>\n`;
+          toolsList += `    <parameter name="${key}" type="${type}">${desc}</parameter>\n`;
         }
       }
-      prompt += `  </parameters>\n`;
-      prompt += `</tool>\n`;
+      toolsList += `  </parameters>\n`;
+      toolsList += `</tool>\n`;
     }
-
-    prompt += `\nCRITICAL INSTRUCTIONS FOR TOOL CALLING:
-You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
-<tool_call>
-  <name>tool_name</name>
-  <arguments>
-    <arg_name>arg_value</arg_name>
-  </arguments>
-</tool_call>
-
-- You MUST wrap your parameters inside an <arguments> block.
-- You MUST use <name> for the tool's name.
-- For object or array parameters, output a JSON-encoded string. Do NOT use nested XML tags.
-- You can output multiple <tool_call> blocks to execute them in parallel.`;
   }
+
+  prompt = prompt.replace('{current_date}', new Date().toISOString());
+  prompt = prompt.replace('{available_skills}', skillsList.trim());
+  prompt = prompt.replace('{available_tools}', toolsList.trim());
 
   return prompt;
 }
