@@ -35,7 +35,7 @@ export async function loadSkills(skillsDir: string): Promise<Skill[]> {
         skills.push({
           name: frontmatter.name,
           description: frontmatter.description,
-          content
+          content: content.replace(/^---\n[\s\S]*?\n---\n*/, '')
         });
       }
     } catch (e) {
