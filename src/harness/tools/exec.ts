@@ -25,14 +25,15 @@ export const execTool: Tool = {
       console: {
         log: (...msgs: any[]) => logs.push(msgs.map(m => String(m)).join(' ')),
         error: (...msgs: any[]) => logs.push('ERROR: ' + msgs.map(m => String(m)).join(' ')),
-      }
+      },
+      fetch
     };
 
     // create the sandboxed execution context
     vm.createContext(sandbox);
 
     try {
-      const result = vm.runInContext(code, sandbox, { timeout: 2000 });
+      const result = await vm.runInContext(code, sandbox, { timeout: 2000 });
       return {
         result,
         logs

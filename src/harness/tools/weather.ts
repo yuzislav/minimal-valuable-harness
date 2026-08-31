@@ -2,7 +2,7 @@ import { Tool } from '../types';
 
 export const weatherTool: Tool = {
   name: 'weather',
-  description: 'Check the weather for a specific city.',
+  description: 'Check the weather for a specific city. The output will be HTML formatted text with forecast',
   parameters: {
     type: 'object',
     properties: {

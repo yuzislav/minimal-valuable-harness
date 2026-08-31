@@ -32,21 +32,29 @@ export interface AgentConfig {
   systemPrompt?: string;
   maxIterations?: number;
   maxContextChars?: number;
+  toolFormat?: 'xml' | 'json';
 }
 
 export class Agent {
   private config: AgentConfig;
   private memory: ConversationMemory;
-  private parser: OutputParser;
+  private parser: import('../parsers/OutputParser').IOutputParser;
   public lastRunIterations: number = 0;
 
   constructor(config: AgentConfig) {
     this.config = config;
     this.config.maxIterations = config.maxIterations ?? parseInt(process.env.MAX_ITERATIONS || '5', 10);
     this.config.maxContextChars = config.maxContextChars ?? parseInt(process.env.MAX_CONTEXT_CHARS || '16000', 10);
+    this.config.toolFormat = config.toolFormat || 'xml';
 
     this.memory = new ConversationMemory(this.config.maxContextChars);
-    this.parser = new OutputParser();
+    
+    if (this.config.toolFormat === 'json') {
+      const { JsonOutputParser } = require('../parsers/JsonOutputParser');
+      this.parser = new JsonOutputParser();
+    } else {
+      this.parser = new OutputParser();
+    }
   }
 
   public clearHistory(): void {
@@ -66,7 +74,8 @@ export class Agent {
     const systemPrompt = buildSystemPrompt(
       this.config.systemPrompt || 'You are a helpful AI assistant.',
       this.config.skills,
-      this.config.tools
+      this.config.tools,
+      this.config.toolFormat
     );
     debugLog(`\n[DEBUG] --- Iteration 0 (System Prompt) ---`);
     debugLog(systemPrompt);
@@ -118,6 +127,19 @@ export class Agent {
         if (!tool) {
           return { call, error: `Tool '${call.name}' not found.` };
         }
+
+        // Validate arguments using Zod
+        if (tool.parameters) {
+          const { jsonSchemaToZod } = require('../utils/zodSchema');
+          const zodSchema = jsonSchemaToZod(tool.parameters);
+          const validation = zodSchema.safeParse(call.args);
+          if (!validation.success) {
+            const errorMessages = validation.error.issues.map((issue: any) => `Validation error at '${issue.path.join('.')}': ${issue.message}`).join(', ');
+            return { call, error: `Invalid arguments for tool '${call.name}': ${errorMessages}` };
+          }
+          call.args = validation.data;
+        }
+
         try {
           const result = await tool.execute(call.args);
           return { call, result };

@@ -146,7 +146,9 @@ async function main() {
       maxContextChars = parseInt(process.env.GEMINI_CONTEXT_LENGTH || '2000000', 10);
     }
 
-    const systemPromptTemplate = fs.readFileSync(path.join(__dirname, 'systemPrompt.md'), 'utf-8');
+    const toolFormat = (process.env.TOOL_FORMAT || 'xml') as 'xml' | 'json';
+    const systemPromptFile = toolFormat === 'json' ? 'systemPrompt.json.md' : 'systemPrompt.xml.md';
+    const systemPromptTemplate = fs.readFileSync(path.join(__dirname, systemPromptFile), 'utf-8');
 
     return new Agent({
       provider,
@@ -154,7 +156,8 @@ async function main() {
       skills,
       systemPrompt: systemPromptTemplate,
       maxIterations: 5,
-      maxContextChars
+      maxContextChars,
+      toolFormat
     });
   };
 

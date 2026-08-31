@@ -5,7 +5,11 @@ export interface ParseResult {
   errors: string[];
 }
 
-export class OutputParser {
+export interface IOutputParser {
+  parseToolCalls(text: string): ParseResult;
+}
+
+export class OutputParser implements IOutputParser {
   /**
    * Extracts tool calls from the LLM's raw text response.
    * Validates against the expected schema and returns meaningful errors if invalid.

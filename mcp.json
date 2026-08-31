@@ -1,1 +1,13 @@
-{}
+{
+  "mcpServers": {
+    "shop-analytics": {
+      "command": "../shop-analytics-mcp/.venv/bin/python",
+      "args": [
+        "../shop-analytics-mcp/server.py"
+      ],
+      "env": {
+        "SHOP_DB_PATH": "shop.db"
+      }
+    }
+  }
+}

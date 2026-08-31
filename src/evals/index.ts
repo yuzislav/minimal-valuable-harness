@@ -53,17 +53,26 @@ async function runAllEvals() {
   // Load MCP servers (needed for shop-mcp evals)
   const mcpManagers = await loadMCPServers(baseTools);
 
-  const systemPromptTemplate = fs.readFileSync(path.join(__dirname, '..', 'systemPrompt.md'), 'utf-8');
+  const tools = [
+    execTool,
+    curlTool,
+    weatherTool,
+    createReadSkillTool(skills)
+  ];
 
-  // Same config as src/index.ts — evals must test the real agent, not a tuned one
-  const createAgent = () =>
-    new Agent({
-      provider: new ProviderClass(),
-      tools: [...baseTools],
-      skills,
-      systemPrompt: systemPromptTemplate,
-      maxContextChars: 1000000,
-    });
+  const toolFormat = (process.env.TOOL_FORMAT || 'xml') as 'xml' | 'json';
+  const systemPromptFile = toolFormat === 'json' ? 'systemPrompt.json.md' : 'systemPrompt.xml.md';
+  const systemPromptTemplate = fs.readFileSync(path.join(__dirname, '..', systemPromptFile), 'utf-8');
+
+  // We must bind createAgent this way so evals can create isolated agents per-test
+  const createAgent = () => new Agent({
+    provider: new ProviderClass(),
+    tools: [...baseTools],
+    skills,
+    systemPrompt: systemPromptTemplate,
+    toolFormat,
+    maxContextChars: 1000000,
+  });
 
   // Suite registry — add new suites here
   const allSuites: Array<{ name: string; run: () => Promise<any> }> = [
