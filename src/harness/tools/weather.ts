@@ -27,13 +27,13 @@ export const weatherTool: Tool = {
       // Append &T to remove ANSI escape sequences for clean text output
       const daysParam = forecastDays !== undefined ? forecastDays : '';
       const url = `https://wttr.in/${encodeURIComponent(cityName)}?${daysParam}&T`;
-      
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
-         throw new Error(`Error fetching weather: ${response.statusText}`);
+        throw new Error(`Error fetching weather: ${response.statusText}`);
       }
-      
+
       const text = await response.text();
       return text;
     } catch (e: any) {

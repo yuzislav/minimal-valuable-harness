@@ -3,6 +3,13 @@ import { ContextStrategy } from './ContextStrategy';
 import { DropOldestStrategy } from './DropOldestStrategy';
 import { CutMiddleStrategy } from './CutMiddleStrategy';
 
+const debugLog = (...args: any[]) => {
+  if (process.env.DEBUG && process.env.DEBUG !== 'false') {
+    const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ');
+    console.log(`\x1b[90m${message}\x1b[0m`);
+  }
+};
+
 export class ConversationMemory {
   private history: Message[] = [];
   private strategy: ContextStrategy;
@@ -26,7 +33,11 @@ export class ConversationMemory {
 
   public addMessage(message: Message): void {
     this.history.push(message);
+    const beforeLength = this.history.length;
     this.history = this.strategy.trim(this.history, this.maxContextChars);
+    if (this.history.length < beforeLength) {
+      debugLog(`[DEBUG] Context trimmed. Removed ${beforeLength - this.history.length} messages to fit within ${this.maxContextChars} chars.`);
+    }
   }
 
   public get length(): number {

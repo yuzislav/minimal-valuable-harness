@@ -95,6 +95,18 @@ registry.register({
   }
 });
 
+registry.register({
+  name: '/context',
+  description: 'Show current context size in characters',
+  execute: ({ agent, reply }) => {
+    const history = agent.getHistory();
+    const size = history.reduce((sum, msg) => sum + msg.content.length, 0);
+    const maxChars = agent.maxContextChars;
+    const percentage = ((size / maxChars) * 100).toFixed(2);
+    reply(`\\n[System]: Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.`);
+  }
+});
+
 async function main() {
   const providerType = process.env.LLM_PROVIDER?.toLowerCase() || 'gemini';
   let provider: any;

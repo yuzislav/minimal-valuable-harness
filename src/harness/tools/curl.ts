@@ -34,21 +34,21 @@ export const curlTool: Tool = {
     try {
       let headers = args.headers || {};
       if (typeof headers === 'string') {
-        try { headers = JSON.parse(headers); } catch (e) {}
+        try { headers = JSON.parse(headers); } catch (e) { }
       }
 
       const options: RequestInit = {
         method: args.method || 'GET',
         headers: headers,
       };
-      
+
       if (args.body) {
         options.body = args.body;
       }
 
       const response = await fetch(url, options);
       const text = await response.text();
-      
+
       return {
         status: response.status,
         statusText: response.statusText,

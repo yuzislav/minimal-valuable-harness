@@ -57,6 +57,10 @@ export class Agent {
     return this.memory.getHistory();
   }
 
+  public get maxContextChars(): number {
+    return this.config.maxContextChars!;
+  }
+
   public async run(userInput: string): Promise<string> {
     this.memory.addMessage({ role: 'user', content: userInput });
     const systemPrompt = buildSystemPrompt(

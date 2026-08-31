@@ -10,7 +10,6 @@ export class DropOldestStrategy implements ContextStrategy {
     // We trim in pairs (2 messages at a time) to maintain conversational alternation
     // (e.g., keeping user -> assistant chains intact), leaving at least 1 message.
     while (totalChars > maxContextChars && newHistory.length > 2) {
-      // Remove two messages to maintain turn order
       const removed1 = newHistory.shift()!;
       const removed2 = newHistory.shift()!;
       totalChars -= (removed1.content.length + removed2.content.length);

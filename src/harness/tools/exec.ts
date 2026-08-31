@@ -27,7 +27,7 @@ export const execTool: Tool = {
         error: (...msgs: any[]) => logs.push('ERROR: ' + msgs.map(m => String(m)).join(' ')),
       }
     };
-    
+
     // create the sandboxed execution context
     vm.createContext(sandbox);
 
