@@ -77,7 +77,13 @@ export class Agent {
       this.lastRunIterations = iterations + 1;
       debugLog(`\n[DEBUG] --- Iteration ${iterations + 1} ---`);
       debugLog(`[DEBUG] Sending request to LLM with history length: ${this.memory.length}`);
-      debugLog(`[DEBUG] Current History:`, this.memory.getHistory());
+      const debugHistory = this.memory.getHistory().map(msg => {
+        if (msg.content.length > 200) {
+          return { ...msg, content: msg.content.slice(0, 200) + `\n...[trimmed for debug, full length: ${msg.content.length} chars]` };
+        }
+        return msg;
+      });
+      debugLog(`[DEBUG] Current History:`, debugHistory);
 
       const responseText = await this.config.provider.generate(this.memory.getHistory(), systemPrompt);
       await rpmDelay();
@@ -117,7 +123,8 @@ export class Agent {
         if (res.error) {
           resultMessage += `Error: ${res.error}\n`;
         } else {
-          resultMessage += `Result: ${JSON.stringify(res.result, null, 2)}\n`;
+          const resultStr = JSON.stringify(res.result, null, 2);
+          resultMessage += `Result: ${resultStr}\n`;
         }
       }
 
