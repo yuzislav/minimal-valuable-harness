@@ -11,6 +11,20 @@ const debugLog = (...args: any[]) => {
   }
 };
 
+// Respect RPM limit between LLM calls inside the agent loop.
+// Uses GEMINI_RPM_LIMIT env var.
+// Defaults to 0 (no delay) so interactive use isn't slowed down.
+// Skipped for local providers which have no rate limits.
+async function rpmDelay(): Promise<void> {
+  if (process.env.LLM_PROVIDER?.toLowerCase() === 'local') return;
+  const rpmLimit = parseInt(process.env.GEMINI_RPM_LIMIT || '0', 10);
+  const waitMs = rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
+  if (waitMs > 0) {
+    debugLog(`[DEBUG] RPM throttle: waiting ${waitMs}ms (${rpmLimit} RPM limit)`);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+  }
+}
+
 export interface AgentConfig {
   provider: Provider;
   tools: Tool[];
@@ -24,12 +38,13 @@ export class Agent {
   private config: AgentConfig;
   private memory: ConversationMemory;
   private parser: OutputParser;
+  public lastRunIterations: number = 0;
 
   constructor(config: AgentConfig) {
     this.config = config;
     this.config.maxIterations = config.maxIterations ?? parseInt(process.env.MAX_ITERATIONS || '5', 10);
     this.config.maxContextChars = config.maxContextChars ?? parseInt(process.env.MAX_CONTEXT_CHARS || '16000', 10);
-    
+
     this.memory = new ConversationMemory(this.config.maxContextChars);
     this.parser = new OutputParser();
   }
@@ -45,20 +60,23 @@ export class Agent {
   public async run(userInput: string): Promise<string> {
     this.memory.addMessage({ role: 'user', content: userInput });
     const systemPrompt = buildSystemPrompt(
-      this.config.systemPrompt || 'You are a helpful AI assistant.', 
-      this.config.skills, 
+      this.config.systemPrompt || 'You are a helpful AI assistant.',
+      this.config.skills,
       this.config.tools
     );
     debugLog(`\n[DEBUG] --- Iteration 0 (System Prompt) ---`);
     debugLog(systemPrompt);
 
+    this.lastRunIterations = 0;
     let iterations = 0;
     while (iterations < this.config.maxIterations!) {
+      this.lastRunIterations = iterations + 1;
       debugLog(`\n[DEBUG] --- Iteration ${iterations + 1} ---`);
       debugLog(`[DEBUG] Sending request to LLM with history length: ${this.memory.length}`);
       debugLog(`[DEBUG] Current History:`, this.memory.getHistory());
 
       const responseText = await this.config.provider.generate(this.memory.getHistory(), systemPrompt);
+      await rpmDelay();
 
       debugLog(`[DEBUG] Received response from LLM (length: ${responseText.length} chars):`);
       debugLog(responseText);

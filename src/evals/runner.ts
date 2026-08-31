@@ -15,24 +15,25 @@ export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent):
     const agent = agentFactory();
     try {
       const response = await agent.run(testCase.input);
-      
-      // Parse tool calls from all assistant messages
+
+      // Parse tool calls and get exact LLM iterations from agent (handles history compaction)
       const history = agent.getHistory();
+      const llmIterations = agent.lastRunIterations;
       const toolCalls = history
         .filter(m => m.role === 'assistant')
         .flatMap(m => parser.parseToolCalls(m.content));
-        
+
       const context: EvalContext = { response, agent, toolCalls };
-      
+
       const result = await testCase.assert(context);
       const isPassed = typeof result === 'boolean' ? result : result.passed;
       const errorMsg = typeof result === 'boolean' ? undefined : result.error;
 
       if (isPassed) {
-        console.log(`\x1b[32m  ✓ PASSED\x1b[0m`);
+        console.log(`\x1b[32m  ✓ PASSED\x1b[0m \x1b[90m(${llmIterations} LLM call${llmIterations !== 1 ? 's' : ''})\x1b[0m`);
         passed++;
       } else {
-        console.log(`\x1b[31m  ✗ FAILED\x1b[0m${errorMsg ? ` - ${errorMsg}` : ''}`);
+        console.log(`\x1b[31m  ✗ FAILED\x1b[0m \x1b[90m(${llmIterations} LLM call${llmIterations !== 1 ? 's' : ''})\x1b[0m${errorMsg ? ` - ${errorMsg}` : ''}`);
         console.log(`    \x1b[90mRequest:\x1b[0m ${testCase.input}`);
         console.log(`    \x1b[90mResponse:\x1b[0m ${response}`);
         failed++;
@@ -60,6 +61,6 @@ export async function runEvalSuite(suite: EvalSuite, agentFactory: () => Agent):
   console.log(`Failed: \x1b[31m${failed}\x1b[0m`);
   console.log(`Total:  ${passed + failed}`);
   console.log('='.repeat(50));
-  
+
   return failed;
 }

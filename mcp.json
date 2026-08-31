@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "sqlite": {
-      "command": "npx",
+    "shop-analytics": {
+      "command": "../shop-analytics-mcp/.venv/bin/python",
       "args": [
-        "-y",
-        "mcp-sqlite-server",
-        "test.db"
+        "../shop-analytics-mcp/server.py"
       ],
-      "env": {}
+      "env": {
+        "SHOP_DB_PATH": "shop.db"
+      }
     }
   }
 }

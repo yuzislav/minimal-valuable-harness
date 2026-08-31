@@ -6,7 +6,10 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "eval": "tsx src/evals/index.ts"
+    "eval:all": "tsx src/evals/index.ts",
+    "eval:shop": "tsx src/evals/index.ts --suite shop",
+    "eval:tools": "tsx src/evals/index.ts --suite tools",
+    "eval:skills": "tsx src/evals/index.ts --suite skills"
   },
   "repository": {
     "type": "git",
