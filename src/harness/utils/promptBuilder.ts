@@ -3,6 +3,7 @@ import { Skill } from '../skills';
 
 export function buildSystemPrompt(basePrompt: string, skills: Skill[], tools: Tool[]): string {
   let prompt = basePrompt || 'You are a helpful AI assistant.';
+  prompt += `\n\nCurrent Date: ${new Date().toISOString()}`;
 
   if (skills.length > 0) {
     prompt += '\n\nAvailable Skills (use the read_skill tool to see full details):\n';
