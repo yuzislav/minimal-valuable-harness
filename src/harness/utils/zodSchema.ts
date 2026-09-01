@@ -24,8 +24,19 @@ export function jsonSchemaToZod(schema: any): z.ZodTypeAny {
         return val;
       }, z.boolean());
     case 'array':
-      return z.array(jsonSchemaToZod(schema.items));
+      return z.preprocess((val) => {
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch {}
+        }
+        return val;
+      }, z.array(jsonSchemaToZod(schema.items)));
     case 'object':
+      const parseObj = (val: any) => {
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch {}
+        }
+        return val;
+      };
       if (schema.properties) {
         const shape: Record<string, z.ZodTypeAny> = {};
         for (const [key, prop] of Object.entries(schema.properties)) {
@@ -35,9 +46,9 @@ export function jsonSchemaToZod(schema: any): z.ZodTypeAny {
           }
           shape[key] = propSchema;
         }
-        return z.object(shape);
+        return z.preprocess(parseObj, z.object(shape));
       }
-      return z.record(z.any());
+      return z.preprocess(parseObj, z.record(z.any()));
     default:
       return z.any();
   }

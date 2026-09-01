@@ -74,13 +74,17 @@ export const shopMcpEvalSuite: EvalSuite = {
           return { passed: false, error: 'Agent did not call any MCP tool' };
         }
 
-        // Agent should have made more than one call — first attempt fails, then schema check
-        if (mcpCalls.length < 2) {
+        const checkedSchema = toolCalls.some(c => c.name === 'get_database_schema');
+
+        // If the agent didn't check the schema, it must have made at least 2 calls 
+        // (an initial failing query + a follow-up query/check). 
+        // If it checked the schema first, 1 call is sufficient!
+        if (!checkedSchema && mcpCalls.length < 2) {
           return {
             passed: false,
             error:
-              `Agent only made ${mcpCalls.length} MCP call(s). ` +
-              'Expected at least 2: an initial attempt + a schema/retry call after the error.',
+              `Agent only made ${mcpCalls.length} MCP call(s) without checking the schema. ` +
+              'Expected at least 2 calls if trying queries blindly (initial attempt + retry).',
           };
         }
 
@@ -127,13 +131,15 @@ export const shopMcpEvalSuite: EvalSuite = {
           return { passed: false, error: 'Agent did not call any MCP tool' };
         }
 
-        // Must retry after discovering schema mismatch
-        if (mcpCalls.length < 2) {
+        const checkedSchema = toolCalls.some(c => c.name === 'get_database_schema');
+
+        // Must retry after discovering schema mismatch OR check schema explicitly
+        if (!checkedSchema && mcpCalls.length < 2) {
           return {
             passed: false,
             error:
-              `Agent only made ${mcpCalls.length} MCP call(s). ` +
-              'Expected at least 2: initial attempt + schema discovery / retry.',
+              `Agent only made ${mcpCalls.length} MCP call(s) without checking schema. ` +
+              'Expected at least 2 calls if attempting queries blindly (initial attempt + retry).',
           };
         }
 
@@ -446,6 +452,58 @@ export const shopMcpEvalSuite: EvalSuite = {
             passed: false,
             error:
               'Response does not mention the correct order count (16). ' +
+              `Response: ${response.slice(0, 300)}`,
+          };
+        }
+
+        return { passed: true };
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    // Task 9 — Missing schema information (e.g., location/country)
+    // Agent must check the schema and correctly report that the information
+    // is not available, without hallucinating queries with non-existent columns.
+    // -----------------------------------------------------------------------
+    {
+      name: 'Task 9 — Missing schema info: agent must report lack of data',
+      input: 'How many customers are from Germany?',
+      assert: ({ response, toolCalls }) => {
+        // We expect the agent to check the schema
+        const schemaCalls = toolCalls.filter(
+          c =>
+            c.name === 'get_database_schema' ||
+            c.name === 'list_tables' ||
+            c.name === 'describe_table',
+        );
+        if (schemaCalls.length === 0) {
+          return {
+            passed: false,
+            error: 'Agent did not check the database schema to find location columns.',
+          };
+        }
+
+        const lower = response.toLowerCase();
+        
+        // Agent must indicate that the schema lacks this information
+        const reportedMissing =
+          lower.includes('not include') ||
+          lower.includes('cannot determine') ||
+          lower.includes('not available') ||
+          lower.includes('no column') ||
+          lower.includes('no field') ||
+          lower.includes('missing') ||
+          lower.includes("don't have") ||
+          lower.includes('do not have') ||
+          lower.includes('no location') ||
+          lower.includes('no country') ||
+          lower.includes('does not specify');
+
+        if (!reportedMissing) {
+          return {
+            passed: false,
+            error:
+              'Agent did not state that the country/location information is missing from the database. ' +
               `Response: ${response.slice(0, 300)}`,
           };
         }

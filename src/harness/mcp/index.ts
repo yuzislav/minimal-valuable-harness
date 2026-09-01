@@ -47,7 +47,12 @@ export class MCPManager {
              return { error: true, content: result.content };
           }
           // The result.content is usually an array of text/image objects
-          // We can just return it directly so the LLM sees it
+          if (Array.isArray(result.content)) {
+            const textParts = result.content.filter((c: any) => c.type === 'text').map((c: any) => c.text);
+            if (textParts.length > 0) {
+              return textParts.join('\n');
+            }
+          }
           return result.content;
         } catch (err: any) {
           return { error: err.message || String(err) };

@@ -123,8 +123,12 @@ export const toolsEvalSuite: EvalSuite = {
       name: 'Curl Tool Check - POST',
       input: 'Make a POST request to https://httpbin.org/post with a JSON body {"agent": "test"}. What is the data field in the response?',
       assert: ({ response, toolCalls }) => {
-        const curlCall = toolCalls.find(call => call.name === 'curl');
-        if (!curlCall) return { passed: false, error: 'Curl tool was not called' };
+        const curlCalls = toolCalls.filter(call => call.name === 'curl');
+        if (curlCalls.length === 0) return { passed: false, error: 'Curl tool was not called' };
+        
+        // Find the curl call that actually has the body we want, or default to the last one
+        const curlCall = curlCalls.find(call => call.args.body) || curlCalls[curlCalls.length - 1];
+        
         if (curlCall.args.method !== 'POST') return { passed: false, error: `Wrong method: ${curlCall.args.method}` };
         if (!curlCall.args.body?.includes('test')) return { passed: false, error: `Wrong body: ${curlCall.args.body}` };
 

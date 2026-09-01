@@ -2,7 +2,7 @@ import { Tool } from '../types';
 
 export const weatherTool: Tool = {
   name: 'weather',
-  description: 'Check the weather for a specific city. The output will be HTML formatted text with forecast',
+  description: 'Check the weather for a specific city.',
   parameters: {
     type: 'object',
     properties: {
@@ -28,7 +28,11 @@ export const weatherTool: Tool = {
       const daysParam = forecastDays !== undefined ? forecastDays : '';
       const url = `https://wttr.in/${encodeURIComponent(cityName)}?${daysParam}&T`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'curl/7.68.0'
+        }
+      });
 
       if (!response.ok) {
         throw new Error(`Error fetching weather: ${response.statusText}`);

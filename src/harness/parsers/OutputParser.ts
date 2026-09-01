@@ -71,7 +71,7 @@ export class OutputParser implements IOutputParser {
         }
 
         if (!parsedAny && argsContent.trim().length > 0) {
-          errors.push(`Invalid arguments format for tool '${name}'. Expected <arg_name>arg_value</arg_name> inside <arguments>.`);
+          errors.push(`Invalid arguments format for tool '${name}'. Expected <parameter_name>parameter_value</parameter_name> inside <arguments>.`);
           continue;
         }
       }

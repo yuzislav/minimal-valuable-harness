@@ -17,7 +17,7 @@ Your response should be a JSON array of tool call objects wrapped in a markdown 
   {
     "name": "tool_name",
     "arguments": {
-      "arg_name": "arg_value"
+      "parameter_name": "parameter_value"
     }
   }
 ]
@@ -67,7 +67,7 @@ Assistant:
 User: What skills do you have?
 Assistant: I have `joke_skill` and `morning_routine`. Would you like me to read one for you?
 
-EXAMPLE OF INCORRECT RESPONSES (DO NOT DO THIS):
+EXAMPLE OF INCORRECT RESPONSES (NEVER DO THIS):
 
 Incorrect (Has conversational text before/after, and invalid trailing comma):
 Assistant: Here is the tool call you requested:

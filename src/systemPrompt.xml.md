@@ -14,14 +14,16 @@ You MUST output tools using EXACTLY the following XML format. Do NOT deviate.
 <tool_call>
   <name>tool_name</name>
   <arguments>
-    <arg_name>arg_value</arg_name>
+    <parameter_name>parameter_value</parameter_name>
   </arguments>
 </tool_call>
 
 - You MUST wrap your parameters inside an <arguments> block.
 - You MUST use <name> for the tool's name.
+- For each parameter, use its exact name as the XML tag (e.g., if the parameter is named 'code', use <code>...</code>).
 - For object or array parameters, output a JSON-encoded string. Do NOT use nested XML tags.
 - You can output multiple <tool_call> blocks to execute them in parallel.
+- You MUST ONLY use tools that are listed in the AVAILABLE TOOLS section. Do NOT hallucinate tools like 'echo'.
 
 EXAMPLE OF CORRECT RESPONSES:
 
