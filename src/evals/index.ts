@@ -10,6 +10,7 @@ import { shopMcpEvalSuite } from './cases/shop-mcp.eval';
 import { Agent } from '../harness/core/Agent';
 import { GeminiProvider } from '../harness/providers/GeminiProvider';
 import { LocalProvider } from '../harness/providers/LocalProvider';
+import { OpenAiProvider } from '../harness/providers/OpenAiProvider';
 import { execTool } from '../harness/tools/exec';
 import { curlTool } from '../harness/tools/curl';
 import { weatherTool } from '../harness/tools/weather';
@@ -29,6 +30,16 @@ async function runAllEvals() {
 
   if (providerType === 'local') {
     ProviderClass = LocalProvider;
+  } else if (providerType === 'openai') {
+    ProviderClass = class extends OpenAiProvider {
+      constructor() {
+        super(
+          process.env.OPENAI_API_KEY,
+          process.env.OPENAI_MODEL,
+          process.env.OPENAI_BASE_URL
+        );
+      }
+    };
   } else {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {

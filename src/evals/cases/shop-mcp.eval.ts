@@ -194,7 +194,8 @@ export const shopMcpEvalSuite: EvalSuite = {
           response.includes('\u0414\u043c\u0438\u0442\u0440\u0438\u0439') ||
           response.includes('\u0425\u0430\u0440\u0438\u0442\u043e\u043d\u043e\u0432') ||
           response.toLowerCase().includes('dmitriy') ||
-          response.toLowerCase().includes('kharitonov');
+          response.toLowerCase().includes('kharitonov') ||
+          response.toLowerCase().includes('dmitriy.kharitonov845@mail.ru');
 
         if (!namePresent) {
           return {
@@ -484,7 +485,7 @@ export const shopMcpEvalSuite: EvalSuite = {
         }
 
         const lower = response.toLowerCase();
-        
+
         // Agent must indicate that the schema lacks this information
         const reportedMissing =
           lower.includes('not include') ||

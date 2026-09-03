@@ -2,6 +2,7 @@ import 'dotenv/config';
 import * as path from 'path';
 import { GeminiProvider } from './harness/providers/GeminiProvider';
 import { LocalProvider } from './harness/providers/LocalProvider';
+import { OpenAiProvider } from './harness/providers/OpenAiProvider';
 import { TerminalUI } from './ui/TerminalUI';
 import { TelegramUI } from './ui/TelegramUI';
 import { Agent } from './harness/core/Agent';
@@ -114,6 +115,13 @@ async function main() {
   if (providerType === 'local') {
     provider = new LocalProvider();
     console.log('\x1b[33m[System] Initialized LocalProvider.\x1b[0m');
+  } else if (providerType === 'openai') {
+    provider = new OpenAiProvider(
+      process.env.OPENAI_API_KEY, 
+      process.env.OPENAI_MODEL, 
+      process.env.OPENAI_BASE_URL
+    );
+    console.log('\x1b[33m[System] Initialized OpenAiProvider.\x1b[0m');
   } else {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -142,6 +150,8 @@ async function main() {
     let maxContextChars = 16000;
     if (providerType === 'local') {
       maxContextChars = parseInt(process.env.LOCAL_CONTEXT_LENGTH || '16000', 10);
+    } else if (providerType === 'openai') {
+      maxContextChars = parseInt(process.env.OPENAI_CONTEXT_LENGTH || '128000', 10);
     } else {
       maxContextChars = parseInt(process.env.GEMINI_CONTEXT_LENGTH || '2000000', 10);
     }
