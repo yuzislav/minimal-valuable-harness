@@ -6,7 +6,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit -p .",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "tsx --experimental-test-module-mocks --test \"test/**/*.test.ts\"",
     "eval:all": "tsx src/evals/index.ts",
     "eval:shop": "tsx src/evals/index.ts --suite shop",
     "eval:tools": "tsx src/evals/index.ts --suite tools",

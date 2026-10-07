@@ -166,6 +166,13 @@ Start the bot using the `--ui telegram` flag (ensure `TELEGRAM_BOT_TOKEN` and `T
 npm start -- --ui telegram
 ```
 
+`TELEGRAM_ALLOWED_USERS` is a comma-separated list of **numeric Telegram user
+IDs** (not usernames: they are case-insensitive and can be reassigned, so
+they are not a safe allow-list key). The bot refuses to start if
+`TELEGRAM_ALLOWED_USERS` is unset, since the `exec`/`curl` tools would
+otherwise be reachable by anyone who finds the bot. Set
+`TELEGRAM_ALLOW_ALL=true` instead if you explicitly want to allow every user.
+
 <details>
 <summary><b>Connecting MCP Servers</b></summary>
 
@@ -204,6 +211,24 @@ The project is designed with a focus on minimal dependencies and code transparen
 - `src/harness/mcp` - Model Context Protocol loader and parser.
 - `src/ui` - Entry points (CLI, Telegram).
 - `src/evals` - Agent performance evaluation system.
+
+**A note on `exec`:** the tool runs each call in a separate child process
+started with Node's `--permission` flag (no `--allow-*`), an empty `env`, a
+memory limit, and a hard `SIGKILL` timeout that also bounds any async work
+left running after the script's top-level code returns. This is **process
+isolation, not a security sandbox** — it stops accidental escapes and
+denial-of-service (no filesystem, network or subprocess access; the host's
+environment variables are never exposed), but it still shares the host
+kernel, so it should not be relied on to run untrusted code from an
+adversarial source. For real multi-tenant isolation, run it in a container
+or microVM instead.
+
+**A note on `curl`:** by default it resolves the target host and refuses
+loopback, link-local and private-range addresses (including after
+redirects), to stop the model from being steered — e.g. by text it fetched —
+into internal services or cloud metadata endpoints. Set
+`CURL_ALLOW_PRIVATE=true` to disable this check. Responses are capped in
+size and requests have a timeout; only `http(s)` URLs are allowed.
 
 **Running Tests:**
 ```bash

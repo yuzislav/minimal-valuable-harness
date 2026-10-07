@@ -133,7 +133,7 @@ test('F4: Agent without systemPrompt tells the model about its tools', { todo: '
   assert.match(p.calls[0].systemPrompt!, /echo/);
 });
 
-test('F2: concurrent Agent.run calls keep history alternating', { todo: 'F2 open' }, async () => {
+test('F2: concurrent Agent.run calls keep history alternating', async () => {
   const p = new MockProvider(['ans1', 'ans2'], { delayMs: 2 });
   const a = mk(p);
   await quiet(() => Promise.all([a.run('first'), a.run('second')]));

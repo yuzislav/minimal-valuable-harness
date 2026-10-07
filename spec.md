@@ -16,8 +16,8 @@ A minimal, clean, and educational TypeScript harness for running an LLM agent lo
    - Maintains conversation history.
    - Employs a rolling window approach: when context size reaches a specified threshold, older messages are pruned to prevent context window overflow.
 
-3. **Protected Execution Environment**:
-   - Supports tool execution (e.g., an `exec` tool) in a protected/sandboxed environment.
+3. **Isolated Execution Environment**:
+   - Supports tool execution (e.g., an `exec` tool) in a separate child process with no filesystem/network/subprocess permissions, a scrubbed environment, and a hard timeout. This is process isolation for safety against accidents and runaway code, not a security boundary against adversarial code — it still shares the host kernel.
 
 4. **Skills Support**:
    - Ability to load, parse, and support skills documented in Markdown (`.md`) files.
