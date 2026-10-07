@@ -206,14 +206,19 @@ The project is designed with a focus on minimal dependencies and code transparen
 - `src/evals` - Agent performance evaluation system.
 
 **Running Tests:**
-The framework includes its own auto-evaluation system for skills and tools:
 ```bash
 # Type-check the project
 npm run typecheck
 
-# Run all test suites
+# Run the hermetic unit test suite (no API keys or network required)
+npm test
+```
+
+The framework also includes an auto-evaluation system for skills and tools, which requires API keys and live services:
+```bash
+# Run all eval suites
 npm run eval:all
 
-# Run a specific test suite (e.g., shop-mcp.eval.ts)
+# Run a specific eval suite (e.g., shop-mcp.eval.ts)
 npm run eval:shop
 ```
