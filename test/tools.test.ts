@@ -120,7 +120,11 @@ test('F16: a server that failed to connect is not returned as an active manager'
 });
 
 test('F16: mcp.json is resolved from the project root, not the cwd', { todo: 'F16 open' }, async () => {
-  const cfg = JSON.stringify({ mcpServers: { ghost: { command: '/nonexistent/mvh-no-such-binary' } } });
+  const originalConnect = MCPManager.prototype.connect;
+  const originalLoadTools = MCPManager.prototype.loadTools;
+  MCPManager.prototype.connect = async function () {};
+  MCPManager.prototype.loadTools = async function () { return []; };
+  const cfg = JSON.stringify({ mcpServers: { fake: { command: 'node' } } });
   const root = await mkdtemp(path.join(tmpdir(), 'mvh-mcp-root-'));
   const nested = path.join(root, 'nested');
   await mkdir(nested);
@@ -133,6 +137,8 @@ test('F16: mcp.json is resolved from the project root, not the cwd', { todo: 'F1
   } finally {
     process.chdir(prev);
     await rm(root, { recursive: true, force: true });
+    MCPManager.prototype.connect = originalConnect;
+    MCPManager.prototype.loadTools = originalLoadTools;
   }
 });
 
