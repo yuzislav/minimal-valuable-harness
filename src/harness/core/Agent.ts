@@ -123,7 +123,6 @@ export class Agent {
 
   private async runExclusive(userInput: string): Promise<string> {
     const historySnapshot = this.memory.snapshot();
-    this.memory.addMessage({ role: 'user', content: userInput });
     const systemPrompt = buildSystemPrompt(
       this.config.systemPrompt,
       this.config.skills,
@@ -133,6 +132,7 @@ export class Agent {
     const debugLog = this.debugLog;
     // The system prompt shares the context window with the history.
     this.memory.setReservedChars(systemPrompt.length);
+    this.memory.addMessage({ role: 'user', content: userInput });
     debugLog(`\n[DEBUG] --- Iteration 0 (System Prompt) ---`);
     debugLog(systemPrompt);
 
