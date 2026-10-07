@@ -40,8 +40,12 @@ export class ConversationMemory {
     }
   }
 
-  public removeLast(): void {
-    this.history.pop();
+  public snapshot(): Message[] {
+    return [...this.history];
+  }
+
+  public restore(snapshot: Message[]): void {
+    this.history = [...snapshot];
   }
 
   public get length(): number {

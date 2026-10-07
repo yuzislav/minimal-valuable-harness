@@ -11,10 +11,11 @@ const debugLog = (...args: any[]) => {
   }
 };
 
-// Respect the provider's RPM limit between LLM calls inside the agent loop.
+// Wait out the remainder of the minimum interval implied by the provider's RPM limit.
 // Providers without an rpmLimit (e.g. local) are never throttled.
-async function rpmDelay(rpmLimit: number | undefined): Promise<void> {
-  const waitMs = rpmLimit && rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
+async function rpmDelay(rpmLimit: number | undefined, lastCallAt: number): Promise<void> {
+  const intervalMs = rpmLimit && rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
+  const waitMs = intervalMs - (Date.now() - lastCallAt);
   if (waitMs > 0) {
     debugLog(`[DEBUG] RPM throttle: waiting ${waitMs}ms (${rpmLimit} RPM limit)`);
     await new Promise(resolve => setTimeout(resolve, waitMs));
@@ -56,6 +57,7 @@ export class Agent {
   private memory: ConversationMemory;
   private parser: import('../parsers/OutputParser').IOutputParser;
   public lastRunIterations: number = 0;
+  private lastCallAt: number = 0;
 
   constructor(config: AgentConfig) {
     this.config = config;
@@ -86,6 +88,7 @@ export class Agent {
   }
 
   public async run(userInput: string): Promise<string> {
+    const historySnapshot = this.memory.snapshot();
     this.memory.addMessage({ role: 'user', content: userInput });
     const systemPrompt = buildSystemPrompt(
       this.config.systemPrompt || 'You are a helpful AI assistant.',
@@ -110,20 +113,20 @@ export class Agent {
       });
       debugLog(`[DEBUG] Current History:`, debugHistory);
 
-      if (iterations > 0) await rpmDelay(this.config.provider.rpmLimit);
+      await rpmDelay(this.config.provider.rpmLimit, this.lastCallAt);
 
       let responseText: string;
       try {
+        this.lastCallAt = Date.now();
         responseText = await this.config.provider.generate(this.memory.getHistory(), systemPrompt);
       } catch (error: any) {
         debugLog(`[DEBUG] Provider generation error:`, error);
-        // Drop the pending user message so history doesn't end with an unanswered turn.
-        this.memory.removeLast();
+        this.memory.restore(historySnapshot);
         return `Error communicating with the LLM provider: ${error.message || String(error)}`;
       }
 
       if (!responseText.trim()) {
-        this.memory.removeLast();
+        this.memory.restore(historySnapshot);
         return 'Error: the LLM provider returned an empty response.';
       }
 
