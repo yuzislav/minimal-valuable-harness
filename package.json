@@ -19,11 +19,15 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=26"
+  },
   "dependencies": {
     "@google/genai": "^2.19.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "dotenv": "^17.4.2",
     "node-telegram-bot-api": "^0.66.0",
+    "undici": "^7.0.0",
     "yaml": "^2.9.0",
     "zod": "^4.5.4"
   },

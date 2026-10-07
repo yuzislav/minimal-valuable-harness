@@ -103,7 +103,7 @@ test('F13: curl refuses loopback / link-local / private addresses', async () => 
   let called = false;
   const f = (async () => { called = true; return new Response('secret'); }) as typeof fetch;
   await withFetch(f, async () => {
-    for (const url of ['http://127.0.0.1/secret', 'http://169.254.169.254/latest/meta-data', 'http://10.0.0.5/']) {
+    for (const url of ['http://127.0.0.1/secret', 'http://169.254.169.254/latest/meta-data', 'http://10.0.0.5/', 'http://[::1]/', 'http://[fd00::1]/']) {
       await assert.rejects(() => curlTool.execute({ url }), undefined, url);
     }
   });
@@ -140,6 +140,34 @@ test('F13: curl re-checks the address after a redirect', async () => {
   await withLookup({ 'example.test': PUBLIC_IP }, () =>
     withFetch(f, () => assert.rejects(() => curlTool.execute({ url: 'https://example.test/start' })))
   );
+});
+
+test('F13: curl drops credentials on a cross-origin redirect', async () => {
+  const seen: Record<string, any>[] = [];
+  const f = (async (url: any, opts: any) => {
+    seen.push({ url: String(url), headers: opts.headers });
+    if (String(url) === 'https://a.test/start') {
+      return new Response(null, { status: 302, headers: { Location: 'https://b.test/next' } });
+    }
+    return new Response('ok');
+  }) as typeof fetch;
+  await withLookup({ 'a.test': PUBLIC_IP, 'b.test': PUBLIC_IP }, () =>
+    withFetch(f, () => curlTool.execute({ url: 'https://a.test/start', headers: { Authorization: 'Bearer x', 'X-Keep': '1' } }))
+  );
+  assert.equal(seen[0].headers.Authorization, 'Bearer x');
+  assert.equal(seen[1].headers.Authorization, undefined);
+  assert.equal(seen[1].headers['X-Keep'], '1');
+});
+
+test('F13: curl enforces the private-address block at connect time (DNS rebinding)', async () => {
+  const saved = curlInternal.lookup;
+  let calls = 0;
+  curlInternal.lookup = (async () => (++calls === 1 ? [{ address: PUBLIC_IP, family: 4 }] : [{ address: '127.0.0.1', family: 4 }])) as any;
+  try {
+    await assert.rejects(() => curlTool.execute({ url: 'http://rebind.test/' }), /blocked/);
+  } finally {
+    curlInternal.lookup = saved;
+  }
 });
 
 test('F13: curl caps the returned body size', async () => {

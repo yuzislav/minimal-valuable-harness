@@ -1,5 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { Agent } from 'undici';
 import { Tool } from '../types';
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -39,8 +40,32 @@ function isBlockedAddress(ip: string): boolean {
   return false;
 }
 
-async function assertHostAllowed(hostname: string): Promise<void> {
+function stripBrackets(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+}
+
+// Validates at connect time, using the very addresses the socket will dial, so a
+// DNS answer that changes between a pre-check and the connection cannot slip through.
+const guardedDispatcher = new Agent({
+  connect: {
+    lookup: (hostname: string, options: any, callback: any) => {
+      _internal.lookup(hostname, { all: true }).then((addresses) => {
+        const bad = addresses.find(({ address }) => isBlockedAddress(address));
+        if (bad) {
+          callback(new Error(`Request blocked: '${hostname}' resolves to loopback/private/link-local address ${bad.address}`));
+        } else if (options?.all) {
+          callback(null, addresses);
+        } else {
+          callback(null, addresses[0].address, addresses[0].family);
+        }
+      }, callback);
+    },
+  },
+});
+
+async function assertHostAllowed(rawHostname: string): Promise<void> {
   if (allowPrivate()) return;
+  const hostname = stripBrackets(rawHostname);
   const direct = isIP(hostname);
   if (direct) {
     if (isBlockedAddress(hostname)) {
@@ -120,12 +145,13 @@ export const curlTool: Tool = {
         try { headers = JSON.parse(headers); } catch (e) { }
       }
 
-      const options: RequestInit = {
+      const options: RequestInit & { dispatcher?: unknown } = {
         method: args.method || 'GET',
         headers: headers,
         redirect: 'manual',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       };
+      if (!allowPrivate()) options.dispatcher = guardedDispatcher;
 
       if (args.body) {
         options.body = args.body;
@@ -147,7 +173,15 @@ export const curlTool: Tool = {
           if (++redirects > MAX_REDIRECTS) {
             throw new Error('Too many redirects');
           }
-          currentUrl = new URL(response.headers.get('location')!, currentUrl);
+          const nextUrl = new URL(response.headers.get('location')!, currentUrl);
+          if (nextUrl.origin !== currentUrl.origin) {
+            options.headers = Object.fromEntries(
+              Object.entries(options.headers as Record<string, string>).filter(
+                ([name]) => !['authorization', 'cookie', 'proxy-authorization'].includes(name.toLowerCase())
+              )
+            );
+          }
+          currentUrl = nextUrl;
           continue;
         }
         break;
@@ -163,7 +197,7 @@ export const curlTool: Tool = {
         truncated
       };
     } catch (e: any) {
-      throw new Error(`HTTP Request failed: ${e.message}`);
+      throw new Error(`HTTP Request failed: ${e.cause?.message ?? e.message}`);
     }
   }
 };
