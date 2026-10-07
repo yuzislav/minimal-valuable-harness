@@ -4,9 +4,9 @@ import { ParseResult, IOutputParser } from './OutputParser';
 
 const ToolCallSchema = z.array(
   z.object({
-    name: z.string({ required_error: "Missing 'name' property", invalid_type_error: "'name' must be a string" }),
-    arguments: z.record(z.any()).optional().default({}),
-    args: z.record(z.any()).optional()
+    name: z.string({ error: (issue) => issue.input === undefined ? "Missing 'name' property" : "'name' must be a string" }),
+    arguments: z.record(z.string(), z.any()).optional().default({}),
+    args: z.record(z.string(), z.any()).optional()
   }).transform(val => ({
     name: val.name,
     args: val.arguments || val.args || {}

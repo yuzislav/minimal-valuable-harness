@@ -27,16 +27,22 @@ export async function loadSkills(skillsDir: string): Promise<Skill[]> {
 
   for (const file of mdFiles) {
     const filePath = path.join(skillsDir, file);
-    const content = await fs.readFile(filePath, 'utf-8');
+    const content = (await fs.readFile(filePath, 'utf-8')).replace(/\r\n/g, '\n');
 
     try {
       const frontmatter = parseFrontmatter(content);
-      if (frontmatter && frontmatter.name && frontmatter.description) {
+      if (!frontmatter) {
+        // No frontmatter: derive name from the file name and description from the first text line.
+        const firstLine = content.split('\n').map(l => l.replace(/^#+\s*/, '').trim()).find(l => l) || '';
+        skills.push({ name: path.basename(file, '.md'), description: firstLine, content });
+      } else if (frontmatter.name && frontmatter.description) {
         skills.push({
           name: frontmatter.name,
           description: frontmatter.description,
           content: content.replace(/^---\n[\s\S]*?\n---\n*/, '')
         });
+      } else {
+        console.warn(`Skipping skill ${file}: frontmatter must include 'name' and 'description'.`);
       }
     } catch (e) {
       console.error(`Error parsing frontmatter in ${file}:`, e);

@@ -40,6 +40,14 @@ export class ConversationMemory {
     }
   }
 
+  public snapshot(): Message[] {
+    return [...this.history];
+  }
+
+  public restore(snapshot: Message[]): void {
+    this.history = [...snapshot];
+  }
+
   public get length(): number {
     return this.history.length;
   }

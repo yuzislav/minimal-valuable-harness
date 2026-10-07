@@ -2,8 +2,7 @@ import { Tool } from '../types';
 import { Skill } from '../skills';
 
 export function buildSystemPrompt(basePrompt: string, skills: Skill[], tools: Tool[], toolFormat: 'xml' | 'json' = 'xml'): string {
-  let prompt = basePrompt || 'You are a helpful AI assistant.\n\nCurrent Date: {current_date}\n\n{available_skills}\n\n{available_tools}';
-
+  
   let skillsList = '';
   if (skills.length > 0) {
     for (const skill of skills) {
@@ -39,9 +38,12 @@ export function buildSystemPrompt(basePrompt: string, skills: Skill[], tools: To
     }
   }
 
-  prompt = prompt.replace('{current_date}', new Date().toISOString());
-  prompt = prompt.replace('{available_skills}', skillsList.trim());
-  prompt = prompt.replace('{available_tools}', toolsList.trim());
-
-  return prompt;
+  // Single pass with a function replacer so `$&` etc. in tool/skill text stay literal
+  // and substituted text is never re-scanned for placeholders.
+  const values: Record<string, string> = {
+    current_date: new Date().toISOString(),
+    available_skills: skillsList.trim(),
+    available_tools: toolsList.trim()
+  };
+  return basePrompt.replace(/\{(current_date|available_skills|available_tools)\}/g, (_, key) => values[key]);
 }

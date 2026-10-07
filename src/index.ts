@@ -165,7 +165,7 @@ async function main() {
       tools,
       skills,
       systemPrompt: systemPromptTemplate,
-      maxIterations: 5,
+      maxIterations: parseInt(process.env.MAX_ITERATIONS || '5', 10),
       maxContextChars,
       toolFormat
     });
