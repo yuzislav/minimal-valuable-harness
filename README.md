@@ -102,7 +102,7 @@ graph LR
 
 ## 🛠 Prerequisites
 
-- **Node.js**: v20.0.0 or higher (required by `@google/genai`).
+- **Node.js**: v26.0.0 or higher (the `exec` tool needs Node's network permission support; see `engines` in `package.json`).
 - **Package Manager**: npm or pnpm.
 - **LLM Backend**: A Gemini API token (for cloud inference) OR a running local model (if using the local provider).
 
@@ -129,7 +129,7 @@ graph LR
 
    # Optional for Telegram UI
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-   TELEGRAM_ALLOWED_USERS=your_username,another_username
+   TELEGRAM_ALLOWED_USERS=123456789,987654321  # numeric user IDs
    ```
 
 ## 💡 Usage
@@ -216,7 +216,7 @@ The project is designed with a focus on minimal dependencies and code transparen
 started with Node's `--permission` flag (no `--allow-*`), an empty `env`, a
 memory limit, and a hard `SIGKILL` timeout that also bounds any async work
 left running after the script's top-level code returns. This is **process
-isolation, not a security sandbox** — it stops accidental escapes and
+isolation, not a security sandbox** - it stops accidental escapes and
 denial-of-service (no filesystem, network or subprocess access; the host's
 environment variables are never exposed), but it still shares the host
 kernel, so it should not be relied on to run untrusted code from an
@@ -225,7 +225,7 @@ or microVM instead.
 
 **A note on `curl`:** by default it resolves the target host and refuses
 loopback, link-local and private-range addresses (including after
-redirects), to stop the model from being steered — e.g. by text it fetched —
+redirects), to stop the model from being steered - e.g. by text it fetched —
 into internal services or cloud metadata endpoints. Set
 `CURL_ALLOW_PRIVATE=true` to disable this check. Responses are capped in
 size and requests have a timeout; only `http(s)` URLs are allowed.

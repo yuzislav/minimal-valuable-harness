@@ -10,7 +10,7 @@ This document summarizes the features, tools, and fixes that were implemented on
 - **Execution Engine:** Replaced `ts-node` with `tsx` to ensure compatibility with modern Node/TypeScript versions and added an `npm start` script.
 
 ## 2. New Tools
-- **`curl` Tool:** Allows the agent to make HTTP requests (GET, POST, etc.) and returns the status, headers, and response body using the native `fetch` API.
+- **`curl` Tool:** Allows the agent to make HTTP requests (GET, POST, etc.) and returns the status, headers, and response body using the native `fetch` API (loopback/private addresses are blocked by default, with a size cap and a timeout; see README).
 - **`weather` Tool:** Allows the agent to fetch the weather for a specific city by querying `https://wttr.in/{city_name}?{number_days_forecast}&T` (stripped of ANSI sequences for clean LLM ingestion).
 
 ## 3. New Skills
