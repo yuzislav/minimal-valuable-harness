@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Agent } from '../src/harness/core/Agent';
 import { MockProvider } from '../src/harness/testing/MockProvider';
 import { Tool } from '../src/harness/types';
+import { createAgentFromEnv } from '../src/harness/createAgent';
 import { echoTool, quiet, xmlCall } from './helpers';
 
 const mk = (provider: MockProvider, tools: Tool[] = [echoTool()], extra: object = {}) =>
@@ -66,16 +67,23 @@ test('stops at maxIterations', async () => {
   assert.equal(a.lastRunIterations, 3);
 });
 
-test('F8: MAX_ITERATIONS env applies when maxIterations is not passed', async () => {
+test('F8: Agent ignores MAX_ITERATIONS in process.env and defaults to 5', async () => {
   const saved = process.env.MAX_ITERATIONS;
   try {
     process.env.MAX_ITERATIONS = '4';
     const p = new MockProvider([], { fallback: xmlCall('echo', { text: 'x' }) });
     await run(mk(p), 'loop');
-    assert.equal(p.calls.length, 4);
+    assert.equal(p.calls.length, 5);
   } finally {
     if (saved === undefined) delete process.env.MAX_ITERATIONS; else process.env.MAX_ITERATIONS = saved;
   }
+});
+
+test('F8: createAgentFromEnv reads MAX_ITERATIONS from the given env', async () => {
+  const p = new MockProvider([], { fallback: xmlCall('echo', { text: 'x' }) });
+  const a = createAgentFromEnv({ provider: p, tools: [echoTool()] }, { MAX_ITERATIONS: '4' });
+  await run(a, 'loop');
+  assert.equal(p.calls.length, 4);
 });
 
 test('F9: BigInt and cyclic tool results do not reject run()', async () => {
@@ -127,10 +135,118 @@ test('F11: throttle applies only between consecutive calls', async () => {
   assert.ok(Date.now() - start >= 9);
 });
 
-test('F4: Agent without systemPrompt tells the model about its tools', { todo: 'F4 open' }, async () => {
+test('F4: Agent without systemPrompt tells the model about its tools', async () => {
   const p = new MockProvider(['hi']);
   await run(new Agent({ provider: p, tools: [echoTool()], skills: [] }), 'hello');
-  assert.match(p.calls[0].systemPrompt!, /echo/);
+  assert.match(p.calls[0].systemPrompt!, /<name>echo<\/name>/);
+  assert.match(p.calls[0].systemPrompt!, /<tool_call>/);
+});
+
+test('F4: default prompt follows toolFormat', async () => {
+  const p = new MockProvider(['hi']);
+  await run(new Agent({ provider: p, tools: [echoTool()], skills: [], toolFormat: 'json' }), 'hello');
+  assert.match(p.calls[0].systemPrompt!, /"name": "echo"/);
+  assert.doesNotMatch(p.calls[0].systemPrompt!, /<tool_call>/);
+});
+
+test('F4: a custom prompt without {available_tools} is rejected', () => {
+  assert.throws(
+    () => new Agent({ provider: new MockProvider(), tools: [], skills: [], systemPrompt: 'You are helpful.' }),
+    /\{available_tools\}/);
+});
+
+test('F4: Agent takes strategy, rate limit and debug from its config, not process.env', async () => {
+  const saved = { ...process.env };
+  try {
+    process.env.DEBUG = 'true';
+    process.env.CONTEXT_STRATEGY = 'drop_oldest';
+    process.env.GEMINI_RPM_LIMIT = '1';
+    const lines: string[] = [];
+    const log = console.log;
+    console.log = (...a: any[]) => { lines.push(a.join(' ')); };
+    const start = Date.now();
+    try {
+      const p = new MockProvider([xmlCall('echo', { text: 'x' }), 'done'], { rpmLimit: 6000 });
+      await mk(p).run('q');
+    } finally { console.log = log; }
+    assert.ok(Date.now() - start < 1000, 'GEMINI_RPM_LIMIT env is not applied');
+    assert.ok(!lines.some(l => l.includes('[DEBUG]')), 'DEBUG env does not enable logging');
+  } finally {
+    for (const k of ['DEBUG', 'CONTEXT_STRATEGY', 'GEMINI_RPM_LIMIT']) {
+      if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
+    }
+  }
+});
+
+test('F4: AgentConfig.rpmLimit overrides the provider and debug can be toggled at runtime', async () => {
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (...a: any[]) => { lines.push(a.join(' ')); };
+  const start = Date.now();
+  try {
+    const p = new MockProvider([xmlCall('echo', { text: 'x' }), 'done']);
+    const a = mk(p, [echoTool()], { rpmLimit: 6000, debug: true });
+    await a.run('q');
+    assert.ok(lines.some(l => l.includes('[DEBUG]')));
+    lines.length = 0;
+    a.debug = false;
+    p.calls.length = 0;
+    await a.run('again');
+    assert.ok(!lines.some(l => l.includes('[DEBUG]')));
+  } finally { console.log = log; }
+  assert.ok(Date.now() - start >= 9, 'rpmLimit from config throttles consecutive calls');
+});
+
+test('F4: createAgentFromEnv wires provider, format, strategy and context size from env', () => {
+  const a = createAgentFromEnv({}, { LLM_PROVIDER: 'local', TOOL_FORMAT: 'json', LOCAL_CONTEXT_CHARS: '5000', CONTEXT_STRATEGY: 'drop_oldest', DEBUG: 'true' });
+  assert.equal(a.maxContextChars, 5000);
+  assert.equal(a.debug, true);
+});
+
+test('F4: createAgentFromEnv still reads the legacy *_CONTEXT_LENGTH name and validates values', () => {
+  assert.equal(createAgentFromEnv({}, { LLM_PROVIDER: 'local', LOCAL_CONTEXT_LENGTH: '7000' }).maxContextChars, 7000);
+  assert.throws(() => createAgentFromEnv({}, { LLM_PROVIDER: 'local', LOCAL_CONTEXT_CHARS: 'lots' }), /LOCAL_CONTEXT_CHARS/);
+  assert.throws(() => createAgentFromEnv({}, { LLM_PROVIDER: 'local', CONTEXT_STRATEGY: 'bogus' }), /bogus/);
+  assert.throws(() => createAgentFromEnv({}, { LLM_PROVIDER: 'local', TOOL_FORMAT: 'yaml' }), /TOOL_FORMAT/);
+  assert.throws(() => createAgentFromEnv({}, {}), /GEMINI_API_KEY/);
+});
+
+test('F4: createAgentFromEnv overrides win over env', () => {
+  const a = createAgentFromEnv({ provider: new MockProvider(), maxContextChars: 123 }, { LLM_PROVIDER: 'local', LOCAL_CONTEXT_CHARS: '5000' });
+  assert.equal(a.maxContextChars, 123);
+});
+
+test('F3: a huge tool result is capped with a visible marker before entering history', async () => {
+  const big: Tool = { ...echoTool(), name: 'big', parameters: { type: 'object', properties: {} }, execute: async () => 'x'.repeat(50000) };
+  const p = new MockProvider([xmlCall('big'), 'summary']);
+  const a = new Agent({ provider: p, tools: [big], skills: [], systemPrompt: '{available_tools}', maxContextChars: 40000 });
+  assert.equal(await run(a, 'Summarise the big thing'), 'summary');
+  const fed = p.calls[1].messages;
+  assert.equal(fed[0].content, 'Summarise the big thing');
+  const result = fed.at(-1)!.content;
+  assert.match(result, /\.\.\.\[truncated 42000 chars\]/);
+  assert.ok(result.length < 9000);
+});
+
+test('F3: tool errors are capped too', async () => {
+  const bad: Tool = { ...echoTool(), name: 'bad', parameters: { type: 'object', properties: {} }, execute: async () => { throw new Error('e'.repeat(20000)); } };
+  const p = new MockProvider([xmlCall('bad'), 'ok']);
+  await run(new Agent({ provider: p, tools: [bad], skills: [], systemPrompt: '{available_tools}', maxToolResultChars: 100 }), 'go');
+  assert.match(p.calls[1].messages.at(-1)!.content, /\.\.\.\[truncated 19900 chars\]/);
+});
+
+test('F3: a long task on a small window keeps the question and the system prompt is counted', async () => {
+  const t: Tool = { ...echoTool(), name: 't', parameters: { type: 'object', properties: {} }, execute: async () => 'r'.repeat(3000) };
+  const replies = [xmlCall('t'), xmlCall('t'), xmlCall('t'), xmlCall('t'), 'final'];
+  const p = new MockProvider(replies);
+  const prompt = 'S'.repeat(2000) + '\n{available_tools}';
+  const a = new Agent({ provider: p, tools: [t], skills: [], systemPrompt: prompt, maxContextChars: 8000, maxIterations: 10 });
+  assert.equal(await run(a, 'Q0 compare many things'), 'final');
+  for (const call of p.calls) {
+    assert.equal(call.messages[0].content, 'Q0 compare many things', 'question always present');
+    const used = call.systemPrompt!.length + call.messages.reduce((n, m) => n + m.content.length, 0);
+    assert.ok(used <= 8000 + 1, `request of ${used} chars fits the 8000 window`);
+  }
 });
 
 test('F2: concurrent Agent.run calls keep history alternating', async () => {

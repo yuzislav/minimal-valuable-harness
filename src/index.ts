@@ -1,18 +1,14 @@
 import 'dotenv/config';
 import * as path from 'path';
-import { GeminiProvider } from './harness/providers/GeminiProvider';
-import { LocalProvider } from './harness/providers/LocalProvider';
-import { OpenAiProvider } from './harness/providers/OpenAiProvider';
 import { TerminalUI } from './ui/TerminalUI';
 import { TelegramUI } from './ui/TelegramUI';
-import { Agent } from './harness/core/Agent';
+import { createAgentFromEnv } from './harness/createAgent';
 import { execTool } from './harness/tools/exec';
 import { curlTool } from './harness/tools/curl';
 import { weatherTool } from './harness/tools/weather';
 import { loadSkills, createReadSkillTool } from './harness/skills';
 import { loadMCPServers } from './harness/mcp/MCPLoader';
 import { CommandRegistry, CommandContext } from './ui/CommandRegistry';
-import * as fs from 'fs';
 const registry = new CommandRegistry();
 
 registry.register({
@@ -32,12 +28,10 @@ registry.register({
 
 registry.register({
   name: '/debug',
-  description: 'Toggle debug logging',
-  execute: ({ reply }) => {
-    const isCurrentlyOn = process.env.DEBUG && process.env.DEBUG !== 'false';
-    const newState = !isCurrentlyOn;
-    process.env.DEBUG = newState ? 'true' : 'false';
-    reply(`\x1b[33m[System]: Debug logging is now ${newState ? 'ON' : 'OFF'}.\x1b[0m`);
+  description: 'Toggle debug logging for this conversation',
+  execute: ({ agent, reply }) => {
+    agent.debug = !agent.debug;
+    reply(`\x1b[33m[System]: Debug logging is now ${agent.debug ? 'ON' : 'OFF'}.\x1b[0m`);
   }
 });
 
@@ -109,27 +103,12 @@ registry.register({
 });
 
 async function main() {
-  const providerType = process.env.LLM_PROVIDER?.toLowerCase() || 'gemini';
-  let provider: any;
-
-  if (providerType === 'local') {
-    provider = new LocalProvider();
-    console.log('\x1b[33m[System] Initialized LocalProvider.\x1b[0m');
-  } else if (providerType === 'openai') {
-    provider = new OpenAiProvider(
-      process.env.OPENAI_API_KEY, 
-      process.env.OPENAI_MODEL, 
-      process.env.OPENAI_BASE_URL
-    );
-    console.log('\x1b[33m[System] Initialized OpenAiProvider.\x1b[0m');
-  } else {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("Please set GEMINI_API_KEY in your environment or .env file to use Gemini (or set LLM_PROVIDER=local).");
-      process.exit(1);
-    }
-    provider = new GeminiProvider(apiKey);
-    console.log('\x1b[33m[System] Initialized GeminiProvider.\x1b[0m');
+  // Fail fast on bad configuration (missing API key, unknown strategy) before loading skills and MCP servers.
+  try {
+    createAgentFromEnv();
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
   }
 
   // Load skills from a 'skills' folder
@@ -146,30 +125,7 @@ async function main() {
 
   const activeMcpManagers = await loadMCPServers(tools);
 
-  const createAgent = () => {
-    let maxContextChars = 16000;
-    if (providerType === 'local') {
-      maxContextChars = parseInt(process.env.LOCAL_CONTEXT_LENGTH || '16000', 10);
-    } else if (providerType === 'openai') {
-      maxContextChars = parseInt(process.env.OPENAI_CONTEXT_LENGTH || '128000', 10);
-    } else {
-      maxContextChars = parseInt(process.env.GEMINI_CONTEXT_LENGTH || '2000000', 10);
-    }
-
-    const toolFormat = (process.env.TOOL_FORMAT || 'xml') as 'xml' | 'json';
-    const systemPromptFile = toolFormat === 'json' ? 'systemPrompt.json.md' : 'systemPrompt.xml.md';
-    const systemPromptTemplate = fs.readFileSync(path.join(__dirname, systemPromptFile), 'utf-8');
-
-    return new Agent({
-      provider,
-      tools,
-      skills,
-      systemPrompt: systemPromptTemplate,
-      maxIterations: parseInt(process.env.MAX_ITERATIONS || '5', 10),
-      maxContextChars,
-      toolFormat
-    });
-  };
+  const createAgent = () => createAgentFromEnv({ tools, skills });
 
   const args = process.argv.slice(2);
   let uiMode = 'terminal';

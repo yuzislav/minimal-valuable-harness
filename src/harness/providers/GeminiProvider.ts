@@ -38,7 +38,6 @@ async function withRetry<T>(
 export class GeminiProvider implements Provider {
   private ai: GoogleGenAI;
   private model: string;
-  public readonly rpmLimit = parseInt(process.env.GEMINI_RPM_LIMIT || '0', 10);
 
   constructor(apiKey: string, model: string = process.env.GEMINI_MODEL || 'gemini-3.6-flash') {
     this.ai = new GoogleGenAI({ apiKey });

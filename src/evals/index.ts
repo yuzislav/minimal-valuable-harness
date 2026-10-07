@@ -1,16 +1,12 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { runEvalSuite } from './runner';
 import { toolsEvalSuite } from './cases/tools.eval';
 import { skillsEvalSuite } from './cases/skills.eval';
 import { shopMcpEvalSuite } from './cases/shop-mcp.eval';
-import { Agent } from '../harness/core/Agent';
-import { GeminiProvider } from '../harness/providers/GeminiProvider';
-import { LocalProvider } from '../harness/providers/LocalProvider';
-import { OpenAiProvider } from '../harness/providers/OpenAiProvider';
+import { createAgentFromEnv } from '../harness/createAgent';
 import { execTool } from '../harness/tools/exec';
 import { curlTool } from '../harness/tools/curl';
 import { weatherTool } from '../harness/tools/weather';
@@ -25,32 +21,11 @@ const suiteArg = (() => {
 })();
 
 async function runAllEvals() {
-  const providerType = process.env.LLM_PROVIDER?.toLowerCase() || 'gemini';
-  let ProviderClass: any;
-
-  if (providerType === 'local') {
-    ProviderClass = LocalProvider;
-  } else if (providerType === 'openai') {
-    ProviderClass = class extends OpenAiProvider {
-      constructor() {
-        super(
-          process.env.OPENAI_API_KEY,
-          process.env.OPENAI_MODEL,
-          process.env.OPENAI_BASE_URL
-        );
-      }
-    };
-  } else {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("Please set GEMINI_API_KEY in your environment or .env file to run evals with Gemini.");
-      process.exit(1);
-    }
-    ProviderClass = class extends GeminiProvider {
-      constructor() {
-        super(apiKey as string);
-      }
-    };
+  try {
+    createAgentFromEnv();
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
   }
 
   // Load skills
@@ -64,24 +39,10 @@ async function runAllEvals() {
   // Load MCP servers (needed for shop-mcp evals)
   const mcpManagers = await loadMCPServers(baseTools);
 
-  const tools = [
-    execTool,
-    curlTool,
-    weatherTool,
-    createReadSkillTool(skills)
-  ];
-
-  const toolFormat = (process.env.TOOL_FORMAT || 'xml') as 'xml' | 'json';
-  const systemPromptFile = toolFormat === 'json' ? 'systemPrompt.json.md' : 'systemPrompt.xml.md';
-  const systemPromptTemplate = fs.readFileSync(path.join(__dirname, '..', systemPromptFile), 'utf-8');
-
   // We must bind createAgent this way so evals can create isolated agents per-test
-  const createAgent = () => new Agent({
-    provider: new ProviderClass(),
+  const createAgent = () => createAgentFromEnv({
     tools: [...baseTools],
     skills,
-    systemPrompt: systemPromptTemplate,
-    toolFormat,
     maxContextChars: 1000000,
   });
 
