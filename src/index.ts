@@ -184,8 +184,15 @@ async function main() {
       console.error("Please set TELEGRAM_BOT_TOKEN in your environment or .env file to use the Telegram UI.");
       process.exit(1);
     }
-    const telegramUI = new TelegramUI(token, createAgent, registry, skills, tools);
-    
+    let telegramUI: TelegramUI;
+    try {
+      telegramUI = new TelegramUI(token, createAgent, registry, skills, tools);
+    } catch (err: any) {
+      console.error(`[System]: ${err.message}`);
+      process.exit(1);
+    }
+
+
     const shutdown = async () => {
       await telegramUI.stop();
       for (const manager of activeMcpManagers) {

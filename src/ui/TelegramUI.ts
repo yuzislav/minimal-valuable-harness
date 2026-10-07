@@ -2,10 +2,13 @@ import TelegramBot from 'node-telegram-bot-api';
 import { Agent } from '../harness/core/Agent';
 import { CommandRegistry, CommandContext } from './CommandRegistry';
 
+const MAX_MESSAGE_CHARS = 4096;
+
 export class TelegramUI {
   private bot: TelegramBot;
   private agents: Map<number, Agent> = new Map();
-  private allowedUsers: Set<string> = new Set();
+  private allowedUserIds: Set<number> = new Set();
+  private allowAll: boolean;
   private agentFactory: () => Agent;
 
   private registry: CommandRegistry;
@@ -13,20 +16,34 @@ export class TelegramUI {
   private tools: any[];
 
   constructor(token: string, agentFactory: () => Agent, registry: CommandRegistry, skills: any[], tools: any[]) {
-    this.bot = new TelegramBot(token, { polling: true });
     this.agentFactory = agentFactory;
     this.registry = registry;
     this.skills = skills;
     this.tools = tools;
 
-    // Load allowed users from environment variable
+    // Numeric Telegram user IDs only: usernames are mutable and case-insensitive,
+    // so they are not a safe allow-list key (see README).
+    this.allowAll = process.env.TELEGRAM_ALLOW_ALL === 'true';
     const allowed = process.env.TELEGRAM_ALLOWED_USERS;
     if (allowed) {
-      allowed.split(',').forEach(user => this.allowedUsers.add(user.trim()));
-    } else {
-      console.warn('\x1b[33m[System]: TELEGRAM_ALLOWED_USERS is not set. The bot will accept messages from ANY user.\x1b[0m');
+      for (const raw of allowed.split(',').map(u => u.trim()).filter(Boolean)) {
+        const id = Number(raw);
+        if (Number.isInteger(id)) {
+          this.allowedUserIds.add(id);
+        } else {
+          console.warn(`\x1b[33m[System]: Ignoring non-numeric TELEGRAM_ALLOWED_USERS entry '${raw}'.\x1b[0m`);
+        }
+      }
     }
 
+    if (this.allowedUserIds.size === 0 && !this.allowAll) {
+      throw new Error(
+        'TELEGRAM_ALLOWED_USERS must be set to a comma-separated list of numeric Telegram user IDs. ' +
+        'Refusing to start with no allow-list. Set TELEGRAM_ALLOW_ALL=true to explicitly allow every user instead.'
+      );
+    }
+
+    this.bot = new TelegramBot(token, { polling: true });
     this.setupListeners();
     this.setupCommands();
   }
@@ -40,14 +57,17 @@ export class TelegramUI {
   }
 
   private isAllowed(msg: TelegramBot.Message): boolean {
-    if (this.allowedUsers.size === 0) return true;
-    const username = msg.from?.username;
-    const userId = msg.from?.id.toString();
-    
-    if (username && this.allowedUsers.has(username)) return true;
-    if (userId && this.allowedUsers.has(userId)) return true;
-    
-    return false;
+    if (this.allowAll) return true;
+    const userId = msg.from?.id;
+    return userId !== undefined && this.allowedUserIds.has(userId);
+  }
+
+  // Telegram rejects messages over 4096 chars and empty messages; split and skip accordingly.
+  private async sendReply(chatId: number, text: string): Promise<void> {
+    if (!text) return;
+    for (let i = 0; i < text.length; i += MAX_MESSAGE_CHARS) {
+      await this.bot.sendMessage(chatId, text.slice(i, i + MAX_MESSAGE_CHARS));
+    }
   }
 
   private getOrCreateAgent(chatId: number): Agent {
@@ -93,7 +113,7 @@ export class TelegramUI {
           reply: async (text: string) => {
             // Strip ANSI codes before sending to Telegram
             const strippedText = text.replace(/\x1b\[[0-9;]*m/g, '');
-            await this.bot.sendMessage(chatId, strippedText);
+            await this.sendReply(chatId, strippedText);
           }
         };
 
@@ -102,11 +122,11 @@ export class TelegramUI {
       }
 
       const agent = this.getOrCreateAgent(chatId);
-      
+
       try {
         console.log(`[TelegramUI]: Received message from chat ${chatId}: ${msg.text}`);
         const result = await agent.run(msg.text);
-        await this.bot.sendMessage(chatId, result);
+        await this.sendReply(chatId, result);
       } catch (error: any) {
         console.error(`[TelegramUI]: Error processing message for chat ${chatId}:`, error);
         await this.bot.sendMessage(chatId, 'An error occurred while processing your request.');

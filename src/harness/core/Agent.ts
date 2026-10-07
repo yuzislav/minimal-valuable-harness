@@ -58,6 +58,9 @@ export class Agent {
   private parser: import('../parsers/OutputParser').IOutputParser;
   public lastRunIterations: number = 0;
   private lastCallAt: number = 0;
+  // Chains concurrent run() calls so two messages for the same agent can never
+  // interleave their history reads/writes (see F2).
+  private runQueue: Promise<any> = Promise.resolve();
 
   constructor(config: AgentConfig) {
     this.config = config;
@@ -87,7 +90,13 @@ export class Agent {
     return this.config.maxContextChars!;
   }
 
-  public async run(userInput: string): Promise<string> {
+  public run(userInput: string): Promise<string> {
+    const task = this.runQueue.then(() => this.runExclusive(userInput));
+    this.runQueue = task.catch(() => {});
+    return task;
+  }
+
+  private async runExclusive(userInput: string): Promise<string> {
     const historySnapshot = this.memory.snapshot();
     this.memory.addMessage({ role: 'user', content: userInput });
     const systemPrompt = buildSystemPrompt(

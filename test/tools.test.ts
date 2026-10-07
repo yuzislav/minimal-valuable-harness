@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { execTool } from '../src/harness/tools/exec';
-import { curlTool } from '../src/harness/tools/curl';
+import { curlTool, _internal as curlInternal } from '../src/harness/tools/curl';
 import { loadMCPServers } from '../src/harness/mcp/MCPLoader';
 import { MCPManager } from '../src/harness/mcp/index';
 import { quiet } from './helpers';
@@ -23,7 +23,37 @@ test('exec: missing code is rejected', async () => {
   await assert.rejects(() => execTool.execute({}), /Missing 'code'/);
 });
 
-test('F1: exec runs code in an isolated process with a hard timeout', { todo: 'F1 open: vm is not an isolation boundary' });
+test('F1: exec runs in a separate process with no filesystem/subprocess access', async () => {
+  await assert.rejects(
+    () => execTool.execute({ code: 'require("fs").readFileSync("/etc/hosts", "utf8")' }),
+    /Execution error:.*(restricted|permission)/i
+  );
+  await assert.rejects(
+    () => execTool.execute({ code: 'require("child_process").execSync("echo hi")' }),
+    /Execution error:.*(restricted|permission)/i
+  );
+});
+
+test('F1: exec runs with a scrubbed environment (no host secrets)', async () => {
+  process.env.MVH_TEST_SECRET = 'should-not-leak';
+  try {
+    const r = await execTool.execute({ code: 'process.env.MVH_TEST_SECRET' });
+    assert.equal(r.result, undefined);
+  } finally {
+    delete process.env.MVH_TEST_SECRET;
+  }
+});
+
+test('F1: exec has a hard timeout that also covers async work after it returns', async () => {
+  const start = Date.now();
+  // The pending timer keeps the process alive long after the synchronous
+  // eval() returns, exercising the async-continuation case from F1.
+  await assert.rejects(
+    () => execTool.execute({ code: 'setTimeout(() => {}, 60000); "started"' }),
+    /Execution error:.*timed out/
+  );
+  assert.ok(Date.now() - start < 10_000, 'killed well before the 60s the script scheduled');
+});
 
 async function withFetch<T>(impl: typeof fetch, fn: () => Promise<T>): Promise<T> {
   const saved = globalThis.fetch;
@@ -32,46 +62,130 @@ async function withFetch<T>(impl: typeof fetch, fn: () => Promise<T>): Promise<T
 }
 const fakeResponse = (body: string, init: ResponseInit = {}) => async () => new Response(body, init);
 
+// Stubs DNS resolution so curl's private-range check never touches the real network.
+async function withLookup<T>(map: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+  const saved = curlInternal.lookup;
+  curlInternal.lookup = (async (hostname: string) => {
+    if (!(hostname in map)) throw new Error(`no DNS stub for ${hostname}`);
+    return [{ address: map[hostname], family: 4 }] as any;
+  }) as any;
+  try { return await fn(); } finally { curlInternal.lookup = saved; }
+}
+
+const PUBLIC_IP = '203.0.113.5'; // TEST-NET-3, documentation-only but not loopback/private/link-local
+
 test('curl: returns status, headers and body; forwards method/headers/body', async () => {
   let seen: any;
-  const f = (async (url: any, opts: any) => { seen = { url, opts }; return new Response('hello', { status: 201, statusText: 'Created', headers: { 'x-a': 'b' } }); }) as typeof fetch;
-  const r = await withFetch(f, () => curlTool.execute({ url: 'https://example.test/x', method: 'POST', headers: '{"h":"1"}', body: 'B' }));
+  const f = (async (url: any, opts: any) => { seen = { url: String(url), opts }; return new Response('hello', { status: 201, statusText: 'Created', headers: { 'x-a': 'b' } }); }) as typeof fetch;
+  const r = await withLookup({ 'example.test': PUBLIC_IP }, () =>
+    withFetch(f, () => curlTool.execute({ url: 'https://example.test/x', method: 'POST', headers: '{"h":"1"}', body: 'B' }))
+  );
   assert.equal(r.status, 201);
   assert.equal(r.data, 'hello');
   assert.equal(r.headers['x-a'], 'b');
-  assert.deepEqual(seen, { url: 'https://example.test/x', opts: { method: 'POST', headers: { h: '1' }, body: 'B' } });
+  assert.equal(seen.url, 'https://example.test/x');
+  assert.equal(seen.opts.method, 'POST');
+  assert.deepEqual(seen.opts.headers, { h: '1' });
+  assert.equal(seen.opts.body, 'B');
+  assert.equal(seen.opts.redirect, 'manual');
+  assert.ok(seen.opts.signal, 'fetch received a signal');
 });
 
 test('curl: missing url and fetch failures are errors', async () => {
   await assert.rejects(() => curlTool.execute({}), /Missing 'url'/);
   const f = (async () => { throw new Error('dns'); }) as typeof fetch;
-  await withFetch(f, () => assert.rejects(() => curlTool.execute({ url: 'https://x.test' }), /HTTP Request failed: dns/));
+  await withLookup({ 'x.test': PUBLIC_IP }, () =>
+    withFetch(f, () => assert.rejects(() => curlTool.execute({ url: 'https://x.test' }), /HTTP Request failed: dns/))
+  );
 });
 
-test('F13: curl refuses loopback / link-local / private addresses', { todo: 'F13 open' }, async () => {
+test('F13: curl refuses loopback / link-local / private addresses', async () => {
   let called = false;
   const f = (async () => { called = true; return new Response('secret'); }) as typeof fetch;
   await withFetch(f, async () => {
-    for (const url of ['http://127.0.0.1/secret', 'http://169.254.169.254/latest/meta-data', 'http://10.0.0.5/']) {
+    for (const url of ['http://127.0.0.1/secret', 'http://169.254.169.254/latest/meta-data', 'http://10.0.0.5/', 'http://[::1]/', 'http://[fd00::1]/']) {
       await assert.rejects(() => curlTool.execute({ url }), undefined, url);
     }
   });
   assert.equal(called, false);
 });
 
-test('F13: curl caps the returned body size', { todo: 'F13 open' }, async () => {
-  const r = await withFetch(fakeResponse('A'.repeat(3_000_000)) as typeof fetch, () => curlTool.execute({ url: 'https://big.test/' }));
-  assert.ok(r.data.length < 1_000_000);
+test('F13: curl resolves hostnames and blocks ones that resolve to a private address', async () => {
+  let called = false;
+  const f = (async () => { called = true; return new Response('secret'); }) as typeof fetch;
+  await withLookup({ 'internal.test': '10.1.2.3' }, () =>
+    withFetch(f, () => assert.rejects(() => curlTool.execute({ url: 'http://internal.test/' })))
+  );
+  assert.equal(called, false);
 });
 
-test('F13: curl passes an abort signal so a stalled server cannot hang it', { todo: 'F13 open' }, async () => {
+test('F13: CURL_ALLOW_PRIVATE=true opts back into private addresses', async () => {
+  process.env.CURL_ALLOW_PRIVATE = 'true';
+  try {
+    const f = (async () => new Response('secret')) as typeof fetch;
+    const r = await withFetch(f, () => curlTool.execute({ url: 'http://127.0.0.1/secret' }));
+    assert.equal(r.data, 'secret');
+  } finally {
+    delete process.env.CURL_ALLOW_PRIVATE;
+  }
+});
+
+test('F13: curl re-checks the address after a redirect', async () => {
+  const f = (async (url: any) => {
+    if (String(url) === 'https://example.test/start') {
+      return new Response(null, { status: 302, headers: { Location: 'http://127.0.0.1/secret' } });
+    }
+    throw new Error('should not be reached: ' + url);
+  }) as typeof fetch;
+  await withLookup({ 'example.test': PUBLIC_IP }, () =>
+    withFetch(f, () => assert.rejects(() => curlTool.execute({ url: 'https://example.test/start' })))
+  );
+});
+
+test('F13: curl drops credentials on a cross-origin redirect', async () => {
+  const seen: Record<string, any>[] = [];
+  const f = (async (url: any, opts: any) => {
+    seen.push({ url: String(url), headers: opts.headers });
+    if (String(url) === 'https://a.test/start') {
+      return new Response(null, { status: 302, headers: { Location: 'https://b.test/next' } });
+    }
+    return new Response('ok');
+  }) as typeof fetch;
+  await withLookup({ 'a.test': PUBLIC_IP, 'b.test': PUBLIC_IP }, () =>
+    withFetch(f, () => curlTool.execute({ url: 'https://a.test/start', headers: { Authorization: 'Bearer x', 'X-Keep': '1' } }))
+  );
+  assert.equal(seen[0].headers.Authorization, 'Bearer x');
+  assert.equal(seen[1].headers.Authorization, undefined);
+  assert.equal(seen[1].headers['X-Keep'], '1');
+});
+
+test('F13: curl enforces the private-address block at connect time (DNS rebinding)', async () => {
+  const saved = curlInternal.lookup;
+  let calls = 0;
+  curlInternal.lookup = (async () => (++calls === 1 ? [{ address: PUBLIC_IP, family: 4 }] : [{ address: '127.0.0.1', family: 4 }])) as any;
+  try {
+    await assert.rejects(() => curlTool.execute({ url: 'http://rebind.test/' }), /blocked/);
+  } finally {
+    curlInternal.lookup = saved;
+  }
+});
+
+test('F13: curl caps the returned body size', async () => {
+  const r = await withLookup({ 'big.test': PUBLIC_IP }, () =>
+    withFetch(fakeResponse('A'.repeat(3_000_000)) as typeof fetch, () => curlTool.execute({ url: 'https://big.test/' }))
+  );
+  assert.ok(r.data.length <= 1_000_000);
+  assert.equal(r.truncated, true);
+});
+
+test('F13: curl passes an abort signal so a stalled server cannot hang it', async () => {
   let signal: any;
   const f = (async (_u: any, o: any) => { signal = o?.signal; return new Response('ok'); }) as typeof fetch;
-  await withFetch(f, () => curlTool.execute({ url: 'https://x.test' }));
+  await withLookup({ 'x.test': PUBLIC_IP }, () => withFetch(f, () => curlTool.execute({ url: 'https://x.test' })));
   assert.ok(signal, 'fetch received a signal');
 });
 
-test('F13: curl only allows http(s)', { todo: 'F13 open' }, async () => {
+test('F13: curl only allows http(s)', async () => {
   const f = (async () => new Response('x')) as typeof fetch;
   await withFetch(f, () => assert.rejects(() => curlTool.execute({ url: 'file:///etc/hosts' })));
 });
