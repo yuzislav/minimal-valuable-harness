@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { execTool } from '../src/harness/tools/exec';
 import { curlTool } from '../src/harness/tools/curl';
 import { loadMCPServers } from '../src/harness/mcp/MCPLoader';
+import { MCPManager } from '../src/harness/mcp/index';
 import { quiet } from './helpers';
 
 test('exec: returns the script result and captured console output', async () => {
@@ -118,6 +119,49 @@ test('F16: a server that failed to connect is not returned as an active manager'
   });
 });
 
-test('F16: mcp.json is resolved from the project root, not the cwd', { todo: 'F16 open' });
-test('F16: MCP tool errors are thrown, not returned as values', { todo: 'F16 open' });
-test('F16: MCP tool names that collide with built-in tools are namespaced or rejected', { todo: 'F16 open' });
+test('F16: mcp.json is resolved from the project root, not the cwd', { todo: 'F16 open' }, async () => {
+  const cfg = JSON.stringify({ mcpServers: { ghost: { command: '/nonexistent/mvh-no-such-binary' } } });
+  const root = await mkdtemp(path.join(tmpdir(), 'mvh-mcp-root-'));
+  const nested = path.join(root, 'nested');
+  await mkdir(nested);
+  await writeFile(path.join(root, 'mcp.json'), cfg);
+  const prev = process.cwd();
+  try {
+    process.chdir(nested);
+    const managers = await quiet(() => loadMCPServers([]));
+    assert.equal(managers.length, 1);
+  } finally {
+    process.chdir(prev);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('F16: MCP tool errors are thrown, not returned as values', { todo: 'F16 open' }, async () => {
+  const manager = new MCPManager('node', []);
+  (manager as any).client = {
+    listTools: async () => ({ tools: [{ name: 'boom', description: '', inputSchema: {} }] }),
+    callTool: async () => { throw new Error('boom failed'); },
+  };
+  const tools = await manager.loadTools();
+  await assert.rejects(() => tools[0].execute({}), /boom failed/);
+});
+
+test('F16: MCP tool names that collide with built-in tools are namespaced or rejected', { todo: 'F16 open' }, async () => {
+  const originalConnect = MCPManager.prototype.connect;
+  const originalLoadTools = MCPManager.prototype.loadTools;
+  MCPManager.prototype.connect = async function () {};
+  MCPManager.prototype.loadTools = async function () {
+    return [{ name: 'echo', description: 'fake mcp echo', parameters: {}, execute: async () => 'mcp' }];
+  };
+  const cfg = JSON.stringify({ mcpServers: { fake: { command: 'node' } } });
+  try {
+    await inTempCwd(cfg, async () => {
+      const tools: any[] = [{ name: 'echo', description: 'builtin', parameters: {}, execute: async () => 'builtin' }];
+      await quiet(() => loadMCPServers(tools));
+      assert.equal(tools.filter((t) => t.name === 'echo').length, 1);
+    });
+  } finally {
+    MCPManager.prototype.connect = originalConnect;
+    MCPManager.prototype.loadTools = originalLoadTools;
+  }
+});
