@@ -11,17 +11,33 @@ const debugLog = (...args: any[]) => {
   }
 };
 
-// Respect RPM limit between LLM calls inside the agent loop.
-// Uses GEMINI_RPM_LIMIT env var.
-// Defaults to 0 (no delay) so interactive use isn't slowed down.
-// Skipped for local providers which have no rate limits.
-async function rpmDelay(): Promise<void> {
-  if (process.env.LLM_PROVIDER?.toLowerCase() === 'local') return;
-  const rpmLimit = parseInt(process.env.GEMINI_RPM_LIMIT || '0', 10);
-  const waitMs = rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
+// Respect the provider's RPM limit between LLM calls inside the agent loop.
+// Providers without an rpmLimit (e.g. local) are never throttled.
+async function rpmDelay(rpmLimit: number | undefined): Promise<void> {
+  const waitMs = rpmLimit && rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
   if (waitMs > 0) {
     debugLog(`[DEBUG] RPM throttle: waiting ${waitMs}ms (${rpmLimit} RPM limit)`);
     await new Promise(resolve => setTimeout(resolve, waitMs));
+  }
+}
+
+// Serialise a tool result without throwing on BigInt or cyclic values; strings pass through unescaped.
+function stringifyResult(value: any): string {
+  if (typeof value === 'string') return value;
+  const ancestors: any[] = [];
+  try {
+    const json = JSON.stringify(value, function (this: any, _key, val) {
+      if (typeof val === 'bigint') return val.toString();
+      if (val && typeof val === 'object') {
+        while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) ancestors.pop();
+        if (ancestors.includes(val)) return '[Circular]';
+        ancestors.push(val);
+      }
+      return val;
+    }, 2);
+    return json === undefined ? String(value) : json;
+  } catch (e: any) {
+    return `[Unserializable result: ${e.message || String(e)}]`;
   }
 }
 
@@ -44,7 +60,7 @@ export class Agent {
   constructor(config: AgentConfig) {
     this.config = config;
     this.config.maxIterations = config.maxIterations ?? parseInt(process.env.MAX_ITERATIONS || '5', 10);
-    this.config.maxContextChars = config.maxContextChars ?? parseInt(process.env.MAX_CONTEXT_CHARS || '16000', 10);
+    this.config.maxContextChars = config.maxContextChars ?? 16000;
     this.config.toolFormat = config.toolFormat || 'xml';
 
     this.memory = new ConversationMemory(this.config.maxContextChars);
@@ -94,13 +110,21 @@ export class Agent {
       });
       debugLog(`[DEBUG] Current History:`, debugHistory);
 
+      if (iterations > 0) await rpmDelay(this.config.provider.rpmLimit);
+
       let responseText: string;
       try {
         responseText = await this.config.provider.generate(this.memory.getHistory(), systemPrompt);
-        await rpmDelay();
       } catch (error: any) {
         debugLog(`[DEBUG] Provider generation error:`, error);
+        // Drop the pending user message so history doesn't end with an unanswered turn.
+        this.memory.removeLast();
         return `Error communicating with the LLM provider: ${error.message || String(error)}`;
+      }
+
+      if (!responseText.trim()) {
+        this.memory.removeLast();
+        return 'Error: the LLM provider returned an empty response.';
       }
 
       debugLog(`[DEBUG] Received response from LLM (length: ${responseText.length} chars):`);
@@ -160,7 +184,7 @@ export class Agent {
           if (res.error) {
             resultMessage += `Error: ${res.error}\n`;
           } else {
-            const resultStr = JSON.stringify(res.result, null, 2);
+            const resultStr = stringifyResult(res.result);
             resultMessage += `Result: ${resultStr}\n`;
           }
         }

@@ -102,7 +102,7 @@ graph LR
 
 ## 🛠 Prerequisites
 
-- **Node.js**: v18.0.0 or higher (for modern JS features support).
+- **Node.js**: v20.0.0 or higher (required by `@google/genai`).
 - **Package Manager**: npm or pnpm.
 - **LLM Backend**: A Gemini API token (for cloud inference) OR a running local model (if using the local provider).
 
@@ -120,6 +120,12 @@ graph LR
    # OR for local models:
    # LLM_PROVIDER=local
    # LOCAL_CONTEXT_LENGTH=16000
+
+   # Optional tuning (see .env.example for all variables)
+   # MAX_ITERATIONS=5          # max LLM calls per user message
+   # TOOL_FORMAT=xml           # xml (default) or json
+   # GEMINI_RPM_LIMIT=15       # throttle Gemini requests per minute
+   # CONTEXT_STRATEGY=cut_middle  # or drop_oldest
 
    # Optional for Telegram UI
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
@@ -149,7 +155,8 @@ Inside an interactive terminal or bot session, you can use:
 - `/clear` - Clear the agent's context/history
 - `/history` - Show full conversation history
 - `/debug` - Toggle debug logging
-- `/exit` or `/quit` - Exit the application
+- `/context` - Show current context size
+- `/exit` - Exit the application
 </details>
 
 ### Telegram Bot
@@ -201,9 +208,12 @@ The project is designed with a focus on minimal dependencies and code transparen
 **Running Tests:**
 The framework includes its own auto-evaluation system for skills and tools:
 ```bash
+# Type-check the project
+npm run typecheck
+
 # Run all test suites
-npm run eval
+npm run eval:all
 
 # Run a specific test suite (e.g., shop-mcp.eval.ts)
-npm run eval -- --suite shop
+npm run eval:shop
 ```

@@ -40,6 +40,10 @@ export class ConversationMemory {
     }
   }
 
+  public removeLast(): void {
+    this.history.pop();
+  }
+
   public get length(): number {
     return this.history.length;
   }

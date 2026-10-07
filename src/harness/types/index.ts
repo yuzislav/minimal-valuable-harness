@@ -17,6 +17,9 @@ export interface Tool {
 }
 
 export interface Provider {
+  /** Requests-per-minute limit to respect between calls; unset or 0 means no throttling. */
+  rpmLimit?: number;
+
   /**
    * Generates a raw text response from the LLM based on the conversation history.
    * In this minimal harness, the LLM will output tool calls as JSON codeblocks,

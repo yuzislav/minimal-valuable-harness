@@ -48,7 +48,7 @@ export function jsonSchemaToZod(schema: any): z.ZodTypeAny {
         }
         return z.preprocess(parseObj, z.object(shape));
       }
-      return z.preprocess(parseObj, z.record(z.any()));
+      return z.preprocess(parseObj, z.record(z.string(), z.any()));
     default:
       return z.any();
   }

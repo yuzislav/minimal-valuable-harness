@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p .",
     "test": "echo \"Error: no test specified\" && exit 1",
     "eval:all": "tsx src/evals/index.ts",
     "eval:shop": "tsx src/evals/index.ts --suite shop",
@@ -17,7 +18,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@google/genai": "^2.19.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -29,7 +30,6 @@
   "devDependencies": {
     "@types/node": "^26.4.0",
     "@types/node-telegram-bot-api": "^0.64.15",
-    "ts-node": "^10.9.2",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }
