@@ -126,11 +126,8 @@ async function main() {
   };
 
   const args = process.argv.slice(2);
-  let uiMode = 'terminal';
   const uiArgIndex = args.indexOf('--ui');
-  if (uiArgIndex !== -1 && args.length > uiArgIndex + 1) {
-    uiMode = args[uiArgIndex + 1];
-  }
+  const uiMode = (uiArgIndex !== -1 && args[uiArgIndex + 1]) || 'terminal';
 
   if (uiMode === 'telegram') {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -158,8 +155,7 @@ async function main() {
   } else {
     const agent = createAgent();
     
-    const initialPromptArgs = args.filter(a => a !== '--ui' && a !== uiMode);
-    const initialPrompt = initialPromptArgs.length > 0 ? initialPromptArgs[0] : undefined;
+    const initialPrompt = args.filter(a => a !== '--ui' && a !== uiMode)[0];
     
     if (initialPrompt && !initialPrompt.startsWith('--')) {
       console.log(`[User]: ${initialPrompt}\n`);
