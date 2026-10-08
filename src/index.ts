@@ -119,6 +119,11 @@ async function main() {
   const activeMcpManagers = await loadMCPServers(tools);
 
   const createAgent = () => createAgentFromEnv({ tools, skills });
+  const disconnectMcp = async () => {
+    for (const manager of activeMcpManagers) {
+      await manager.disconnect();
+    }
+  };
 
   const args = process.argv.slice(2);
   let uiMode = 'terminal';
@@ -144,9 +149,7 @@ async function main() {
 
     const shutdown = async () => {
       await telegramUI.stop();
-      for (const manager of activeMcpManagers) {
-        await manager.disconnect();
-      }
+      await disconnectMcp();
       process.exit(0);
     };
 
@@ -184,10 +187,7 @@ async function main() {
     }
 
     terminal.close();
-
-    for (const manager of activeMcpManagers) {
-      await manager.disconnect();
-    }
+    await disconnectMcp();
   }
 }
 
