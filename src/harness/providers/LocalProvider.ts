@@ -13,17 +13,10 @@ export class LocalProvider implements Provider {
   }
 
   async generate(messages: Message[], systemPrompt?: string): Promise<string> {
-    const apiMessages: any[] = [];
-    
-    if (systemPrompt) {
-      apiMessages.push({ role: 'system', content: systemPrompt });
-    }
+    const apiMessages = messages.map(msg => ({ role: msg.role, content: msg.content }));
 
-    for (const msg of messages) {
-      apiMessages.push({
-        role: msg.role,
-        content: msg.content
-      });
+    if (systemPrompt) {
+      apiMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
     const payload = {
