@@ -31,7 +31,7 @@ function isBlockedAddress(ip: string): boolean {
   if (family === 6) {
     const lower = ip.toLowerCase();
     if (lower === '::1') return true; // loopback
-    if (lower.startsWith('fe80:') || lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true; // link-local
+    if (/^fe[89ab]/.test(lower)) return true; // link-local (fe80::/10)
     if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local
     const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isBlockedAddress(mapped[1]);
