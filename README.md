@@ -119,7 +119,7 @@ graph LR
    GEMINI_API_KEY=your_api_key_here
    # OR for local models:
    # LLM_PROVIDER=local
-   # LOCAL_CONTEXT_LENGTH=16000
+   # LOCAL_CONTEXT_CHARS=16000   # context window in characters (not tokens)
 
    # Optional tuning (see .env.example for all variables)
    # MAX_ITERATIONS=5          # max LLM calls per user message
@@ -207,10 +207,18 @@ The project is designed with a focus on minimal dependencies and code transparen
 
 **Project Structure:**
 - `src/harness/core` - Core logic for the agent and memory.
+- `src/harness/createAgent.ts` - `createAgentFromEnv(overrides?)`, the one place that turns environment variables into an `Agent`.
+- `src/harness/prompts` - Bundled system prompts, one per tool-call format.
 - `src/harness/tools` - Built-in tools (`exec`, `curl`, `weather`).
 - `src/harness/mcp` - Model Context Protocol loader and parser.
 - `src/ui` - Entry points (CLI, Telegram).
 - `src/evals` - Agent performance evaluation system.
+
+**Using the `Agent` as a library:** `new Agent({ provider, tools, skills })` uses the bundled system prompt for its `toolFormat`, so the model is told about its tools.
+A custom `systemPrompt` must contain `{available_tools}` (and may use `{available_skills}` and `{current_date}`).
+Configuration is passed in `AgentConfig` (`maxIterations`, `maxContextChars`, `contextStrategy`, `rpmLimit`, `debug`); the `Agent` never reads `process.env`.
+Context sizes are counted in characters and include the system prompt.
+Tool results are capped (`maxToolResultChars`) with a `...[truncated N chars]` marker, and trimming never drops the current task's user message or its tool rounds.
 
 **A note on `exec`:** the tool runs each call in a separate child process
 started with Node's `--permission` flag (no `--allow-*`), an empty `env`, a

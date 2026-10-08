@@ -1,19 +1,20 @@
 import { Message, Provider, Tool, ToolCall } from '../types';
 import { Skill } from '../skills';
-import { ConversationMemory } from '../memory/ConversationMemory';
+import { ConversationMemory, ContextStrategyName } from '../memory/ConversationMemory';
+import { ContextStrategy } from '../memory/ContextStrategy';
 import { OutputParser } from '../parsers/OutputParser';
 import { buildSystemPrompt } from '../utils/promptBuilder';
+import { loadDefaultSystemPrompt } from '../utils/defaultPrompt';
+import { createDebugLog } from '../utils/debug';
+import { truncateText } from '../utils/truncate';
 
-const debugLog = (...args: any[]) => {
-  if (process.env.DEBUG && process.env.DEBUG !== 'false') {
-    const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ');
-    console.log(`\x1b[90m${message}\x1b[0m`);
-  }
-};
+const DEFAULT_MAX_ITERATIONS = 5;
+const DEFAULT_MAX_CONTEXT_CHARS = 16000;
+const MAX_TOOL_RESULT_CHARS = 8000;
 
 // Wait out the remainder of the minimum interval implied by the provider's RPM limit.
 // Providers without an rpmLimit (e.g. local) are never throttled.
-async function rpmDelay(rpmLimit: number | undefined, lastCallAt: number): Promise<void> {
+async function rpmDelay(rpmLimit: number | undefined, lastCallAt: number, debugLog: (...args: any[]) => void): Promise<void> {
   const intervalMs = rpmLimit && rpmLimit > 0 ? Math.ceil(60000 / rpmLimit) : 0;
   const waitMs = intervalMs - (Date.now() - lastCallAt);
   if (waitMs > 0) {
@@ -46,14 +47,24 @@ export interface AgentConfig {
   provider: Provider;
   tools: Tool[];
   skills: Skill[];
+  /** Prompt template with an `{available_tools}` placeholder. Defaults to the bundled prompt for `toolFormat`. */
   systemPrompt?: string;
   maxIterations?: number;
+  /** Context window in characters (not tokens), shared by the system prompt and the history. */
   maxContextChars?: number;
+  /** Per-result cap in characters for tool output entering history. Default: min(8000, maxContextChars / 4). */
+  maxToolResultChars?: number;
   toolFormat?: 'xml' | 'json';
+  /** How history is trimmed once it exceeds the context window. Default: 'cut_middle'. */
+  contextStrategy?: ContextStrategyName | ContextStrategy;
+  /** Requests per minute; overrides `provider.rpmLimit`. 0 or unset means no throttling. */
+  rpmLimit?: number;
+  /** Print debug logs. Can be toggled at runtime via `agent.debug`. */
+  debug?: boolean;
 }
 
 export class Agent {
-  private config: AgentConfig;
+  private config: AgentConfig & { systemPrompt: string };
   private memory: ConversationMemory;
   private parser: import('../parsers/OutputParser').IOutputParser;
   public lastRunIterations: number = 0;
@@ -62,13 +73,27 @@ export class Agent {
   // interleave their history reads/writes (see F2).
   private runQueue: Promise<any> = Promise.resolve();
 
-  constructor(config: AgentConfig) {
-    this.config = config;
-    this.config.maxIterations = config.maxIterations ?? parseInt(process.env.MAX_ITERATIONS || '5', 10);
-    this.config.maxContextChars = config.maxContextChars ?? 16000;
-    this.config.toolFormat = config.toolFormat || 'xml';
+  public debug: boolean;
+  private debugLog = createDebugLog(() => this.debug);
 
-    this.memory = new ConversationMemory(this.config.maxContextChars);
+  constructor(config: AgentConfig) {
+    const toolFormat = config.toolFormat || 'xml';
+    const maxContextChars = config.maxContextChars ?? DEFAULT_MAX_CONTEXT_CHARS;
+    const systemPrompt = config.systemPrompt ?? loadDefaultSystemPrompt(toolFormat);
+    if (!systemPrompt.includes('{available_tools}')) {
+      throw new Error("AgentConfig.systemPrompt must contain the '{available_tools}' placeholder, otherwise the model is never told which tools exist.");
+    }
+    this.config = {
+      ...config,
+      systemPrompt,
+      toolFormat,
+      maxContextChars,
+      maxIterations: config.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+      maxToolResultChars: config.maxToolResultChars ?? Math.min(MAX_TOOL_RESULT_CHARS, Math.floor(maxContextChars / 4)),
+    };
+    this.debug = config.debug ?? false;
+
+    this.memory = new ConversationMemory(maxContextChars, { strategy: config.contextStrategy });
     
     if (this.config.toolFormat === 'json') {
       const { JsonOutputParser } = require('../parsers/JsonOutputParser');
@@ -98,13 +123,16 @@ export class Agent {
 
   private async runExclusive(userInput: string): Promise<string> {
     const historySnapshot = this.memory.snapshot();
-    this.memory.addMessage({ role: 'user', content: userInput });
     const systemPrompt = buildSystemPrompt(
-      this.config.systemPrompt || 'You are a helpful AI assistant.',
+      this.config.systemPrompt,
       this.config.skills,
       this.config.tools,
       this.config.toolFormat
     );
+    const debugLog = this.debugLog;
+    // The system prompt shares the context window with the history.
+    this.memory.setReservedChars(systemPrompt.length);
+    this.memory.addMessage({ role: 'user', content: userInput });
     debugLog(`\n[DEBUG] --- Iteration 0 (System Prompt) ---`);
     debugLog(systemPrompt);
 
@@ -122,7 +150,7 @@ export class Agent {
       });
       debugLog(`[DEBUG] Current History:`, debugHistory);
 
-      await rpmDelay(this.config.provider.rpmLimit, this.lastCallAt);
+      await rpmDelay(this.config.rpmLimit ?? this.config.provider.rpmLimit, this.lastCallAt, debugLog);
 
       let responseText: string;
       try {
@@ -184,6 +212,7 @@ export class Agent {
         }
       }));
 
+      const cap = this.config.maxToolResultChars!;
       let resultMessage = '';
       if (parseErrors.length > 0) {
         resultMessage += `Validation Errors in your tool calls:\n${parseErrors.join('\n')}\n\nPlease correct these errors and try again.\n`;
@@ -194,9 +223,9 @@ export class Agent {
         for (const res of toolResults) {
           resultMessage += `\nTool: ${res.call.name}\n`;
           if (res.error) {
-            resultMessage += `Error: ${res.error}\n`;
+            resultMessage += `Error: ${truncateText(res.error, cap)}\n`;
           } else {
-            const resultStr = stringifyResult(res.result);
+            const resultStr = truncateText(stringifyResult(res.result), cap);
             resultMessage += `Result: ${resultStr}\n`;
           }
         }

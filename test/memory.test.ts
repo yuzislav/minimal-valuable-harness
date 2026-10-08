@@ -33,14 +33,13 @@ test('CutMiddle keeps the first message and drops the oldest finished task after
   assert.deepEqual(r.map(m => m.content), ['u1', 'a1', 'u3']);
 });
 
-test('CutMiddle removes an intermediate tool pair before anything else', () => {
+test('CutMiddle removes an intermediate tool pair of a finished task before anything else', () => {
   const h = [
     msg('user', 'Q'), msg('assistant', 'call1'), msg('user', 'Tool execution results:\nr1'),
-    msg('assistant', 'call2'), msg('user', 'Tool execution results:\nr2'),
+    msg('assistant', 'final'), msg('user', 'next'),
   ];
-  const r = new CutMiddleStrategy().trim(h, 45);
-  assert.equal(r[0].content, 'Q');
-  assert.equal(r.length, 3);
+  const r = new CutMiddleStrategy().trim(h, 20);
+  assert.deepEqual(r.map(m => m.content), ['Q', 'final', 'next']);
 });
 
 test('ConversationMemory snapshot/restore/clear', async () => {
@@ -54,16 +53,35 @@ test('ConversationMemory snapshot/restore/clear', async () => {
   assert.equal(m.length, 0);
 });
 
-test('ConversationMemory honours CONTEXT_STRATEGY', async () => {
+test('ConversationMemory uses the configured strategy, not process.env', async () => {
   const saved = process.env.CONTEXT_STRATEGY;
   try {
-    process.env.CONTEXT_STRATEGY = 'drop_oldest';
-    const m = new ConversationMemory(5);
+    process.env.CONTEXT_STRATEGY = 'cut_middle';
+    const m = new ConversationMemory(5, { strategy: 'drop_oldest' });
     await quiet(() => { m.addMessage(msg('user', 'aaaa')); m.addMessage(msg('assistant', 'bbbb')); m.addMessage(msg('user', 'cc')); });
     assert.deepEqual(m.getHistory().map(x => x.content), ['cc']);
   } finally {
     if (saved === undefined) delete process.env.CONTEXT_STRATEGY; else process.env.CONTEXT_STRATEGY = saved;
   }
+});
+
+test('ConversationMemory rejects an unknown strategy name', () => {
+  assert.throws(() => new ConversationMemory(100, { strategy: 'nope' as any }), /nope/);
+});
+
+test('ConversationMemory counts reserved (system prompt) chars against the window', async () => {
+  const m = new ConversationMemory(100);
+  m.setReservedChars(60);
+  assert.equal(m.budgetChars, 40);
+  m.setReservedChars(500);
+  assert.equal(m.budgetChars, 25, 'budget never collapses below a quarter of the window');
+  m.setReservedChars(60);
+  await quiet(() => {
+    m.addMessage(msg('user', 'old question'));
+    m.addMessage(msg('assistant', 'a'.repeat(30)));
+    m.addMessage(msg('user', 'new question'));
+  });
+  assert.deepEqual(m.getHistory().map(x => x.content), ['new question']);
 });
 
 const bigResult = () => [
@@ -73,13 +91,13 @@ const bigResult = () => [
 ];
 
 for (const [name, S] of [['CutMiddle', CutMiddleStrategy], ['DropOldest', DropOldestStrategy]] as const) {
-  test(`F3-A (${name}): one huge tool result must not drop the user's question`, { todo: 'F3 open' }, () => {
+  test(`F3-A (${name}): one huge tool result must not drop the user's question`, () => {
     const r = new S().trim(bigResult(), 16000);
     assert.ok(r.some(m => m.content.startsWith('Summarise')), 'user question kept');
   });
 }
 
-test('F3-B: earlier rounds of the running task are not deleted mid-task', { todo: 'F3 open' }, () => {
+test('F3-B: earlier rounds of the running task are not deleted mid-task', () => {
   let h: Message[] = [msg('user', 'Q0 compare many things')];
   for (let i = 1; i <= 5; i++) {
     h.push(msg('assistant', `<tool_call><name>t${i}</name></tool_call>`));
@@ -89,7 +107,7 @@ test('F3-B: earlier rounds of the running task are not deleted mid-task', { todo
   assert.ok(h.some(m => m.content.includes('RESULT_1')), 'round 1 still present');
 });
 
-test('F3: validation-error feedback messages are recognised as intermediate steps', { todo: 'F3 open' }, () => {
+test('F3: validation-error feedback messages are recognised as intermediate steps', () => {
   const h = [
     msg('user', 'Q'), msg('assistant', 'bad call'), msg('user', 'Validation Errors in your tool calls:\n' + 'e'.repeat(100)),
     msg('assistant', 'final'), msg('user', 'next'),
@@ -97,4 +115,51 @@ test('F3: validation-error feedback messages are recognised as intermediate step
   const r = new CutMiddleStrategy().trim(h, 20);
   assert.ok(!r.some(m => m.content.startsWith('Validation Errors')));
   assert.equal(r[0].content, 'Q');
+});
+
+for (const [name, S] of [['CutMiddle', CutMiddleStrategy], ['DropOldest', DropOldestStrategy]] as const) {
+  test(`F3-A (${name}): the huge result is truncated with a marker and the call is kept`, () => {
+    const r = new S().trim(bigResult(), 16000);
+    assert.equal(r.length, 3);
+    assert.ok(total(r) <= 16000);
+    assert.match(r[2].content, /^Tool execution results:/);
+    assert.match(r[2].content, /\.\.\.\[truncated \d+ chars\]$/);
+  });
+
+  test(`F3 (${name}): the current task is never dropped, older tasks go first`, () => {
+    const h = [
+      msg('user', 'old q'.repeat(10)), msg('assistant', 'old a'.repeat(10)),
+      msg('user', 'Q'), msg('assistant', 'call'), msg('user', 'Tool execution results:\n' + 'r'.repeat(60)),
+    ];
+    const r = new S().trim(h, 100);
+    assert.deepEqual(r.map(m => m.content.slice(0, 5)), ['Q', 'call', 'Tool ']);
+  });
+
+  test(`F3 (${name}): an oversized question alone is truncated, never dropped`, () => {
+    const r = new S().trim([msg('user', 'q'.repeat(5000))], 1000);
+    assert.equal(r.length, 1);
+    assert.ok(total(r) <= 1000);
+    assert.match(r[0].content, /\.\.\.\[truncated \d+ chars\]$/);
+  });
+}
+
+test('F3: validation feedback inside the running task is protected too', () => {
+  const h = [
+    msg('user', 'old'), msg('assistant', 'old a'),
+    msg('user', 'Q'), msg('assistant', 'bad'), msg('user', 'Validation Errors in your tool calls:\nboom'),
+  ];
+  const r = new CutMiddleStrategy().trim(h, 40);
+  assert.deepEqual(r.map(m => m.content.slice(0, 5)), ['Q', 'bad', 'Valid']);
+});
+
+test('F3-B: under a tight window every round of the running task is kept, shrunk instead', () => {
+  let h: Message[] = [msg('user', 'Q0')];
+  for (let i = 1; i <= 5; i++) {
+    h.push(msg('assistant', `call-${i}`));
+    h.push(msg('user', `Tool execution results:\nRESULT_${i} ` + 'y'.repeat(3000)));
+    h = new CutMiddleStrategy().trim(h, 4000);
+  }
+  assert.equal(h.length, 11);
+  assert.ok(total(h) <= 4000);
+  for (let i = 1; i <= 5; i++) assert.ok(h.some(m => m.content.includes(`RESULT_${i}`)));
 });
