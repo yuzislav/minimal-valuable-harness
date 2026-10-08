@@ -15,7 +15,12 @@
  *   Task 8 : София Яковлев, 16 orders
  */
 
+import { ToolCall } from '../../harness/types';
 import { EvalSuite } from '../types';
+
+const onlySql = (calls: ToolCall[]) => calls.filter(c => c.name === 'execute_read_only_sql');
+const mcpOnly = (calls: ToolCall[]) =>
+  calls.filter(c => c.name === 'execute_read_only_sql' || c.name === 'get_database_schema');
 
 export const shopMcpEvalSuite: EvalSuite = {
   name: 'Shop MCP — Functional Task Evals',
@@ -65,11 +70,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 2 — Germany Customers: agent must handle missing country column',
       input: 'How many customers are from Germany?',
       assert: ({ response, toolCalls }) => {
-        const mcpCalls = toolCalls.filter(
-          c =>
-            c.name === 'execute_read_only_sql' ||
-            c.name === 'get_database_schema',
-        );
+        const mcpCalls = mcpOnly(toolCalls);
         if (mcpCalls.length === 0) {
           return { passed: false, error: 'Agent did not call any MCP tool' };
         }
@@ -122,11 +123,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 3 — Country with most customers: agent must handle missing country column',
       input: 'Which country has the most customers?',
       assert: ({ response, toolCalls }) => {
-        const mcpCalls = toolCalls.filter(
-          c =>
-            c.name === 'execute_read_only_sql' ||
-            c.name === 'get_database_schema',
-        );
+        const mcpCalls = mcpOnly(toolCalls);
         if (mcpCalls.length === 0) {
           return { passed: false, error: 'Agent did not call any MCP tool' };
         }
@@ -179,9 +176,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 4 — Top spender: correct name, email, and total',
       input: 'Who is the customer who spent the most money?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -244,9 +239,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 5 — Top 5 products: names, units sold, revenue in response',
       input: 'What are the top 5 best-selling products?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -297,9 +290,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 6 — Top 3 categories: correct category names in response',
       input: 'What are the top 3 product categories by revenue?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -350,9 +341,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 7 — 2025 revenue: agent must discover all orders are in 2026',
       input: 'How much revenue did we generate in 2025?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -404,9 +393,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 8 — Most orders: correct customer name and order count',
       input: 'Which customer placed the most orders?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
