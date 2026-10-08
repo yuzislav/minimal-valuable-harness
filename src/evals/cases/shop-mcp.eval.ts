@@ -188,9 +188,7 @@ export const shopMcpEvalSuite: EvalSuite = {
         const namePresent =
           response.includes('\u0414\u043c\u0438\u0442\u0440\u0438\u0439') ||
           response.includes('\u0425\u0430\u0440\u0438\u0442\u043e\u043d\u043e\u0432') ||
-          response.toLowerCase().includes('dmitriy') ||
-          response.toLowerCase().includes('kharitonov') ||
-          response.toLowerCase().includes('dmitriy.kharitonov845@mail.ru');
+          ['dmitriy', 'kharitonov'].some((n) => response.toLowerCase().includes(n));
 
         if (!namePresent) {
           return {
@@ -421,9 +419,7 @@ export const shopMcpEvalSuite: EvalSuite = {
         const namePresent =
           response.includes('\u0421\u043e\u0444\u0438\u044f') || // София
           response.includes('\u042f\u043a\u043e\u0432\u043b\u0435\u0432') || // Яковлев
-          response.toLowerCase().includes('sofiya') ||
-          response.toLowerCase().includes('sofiia') ||
-          response.toLowerCase().includes('yakovlev');
+          ['sofiya', 'sofiia', 'yakovlev'].some((n) => response.toLowerCase().includes(n));
 
         if (!namePresent) {
           return {
