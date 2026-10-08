@@ -10,8 +10,10 @@ import { loadSkills, createReadSkillTool } from './harness/skills';
 import { loadMCPServers } from './harness/mcp/MCPLoader';
 import { CommandRegistry, CommandContext } from './ui/CommandRegistry';
 
+const systemMessage = (text: string) => `\x1b[33m[System]: ${text}\x1b[0m`;
+
 function formatList(label: string, items: { name: string; description: string }[]): string {
-  if (items.length === 0) return `\n\x1b[33m[System]: No ${label} available.\x1b[0m`;
+  if (items.length === 0) return `\n${systemMessage(`No ${label} available.`)}`;
   return `\nAvailable ${label}:\n` + items.map(i => `  ${i.name.padEnd(20)} - ${i.description}\n`).join('');
 }
 
@@ -28,7 +30,7 @@ registry.register({
   description: 'Clear the agent context/history',
   execute: ({ agent, reply }) => {
     agent.clearHistory();
-    reply('\x1b[33m[System]: Context cleared. Started a new session.\x1b[0m');
+    reply(systemMessage('Context cleared. Started a new session.'));
   }
 });
 
@@ -37,7 +39,7 @@ registry.register({
   description: 'Toggle debug logging for this conversation',
   execute: ({ agent, reply }) => {
     agent.debug = !agent.debug;
-    reply(`\x1b[33m[System]: Debug logging is now ${agent.debug ? 'ON' : 'OFF'}.\x1b[0m`);
+    reply(systemMessage(`Debug logging is now ${agent.debug ? 'ON' : 'OFF'}.`));
   }
 });
 
@@ -47,14 +49,11 @@ registry.register({
   execute: ({ agent, reply }) => {
     const history = agent.getHistory();
     if (history.length === 0) {
-      reply('\n\x1b[33m[System]: History is empty.\x1b[0m');
-    } else {
-      let output = '\n\x1b[33m[System]: Full Conversation History:\x1b[0m\n';
-      history.forEach((msg: any, idx: number) => {
-        output += `\n--- Message ${idx + 1} (${msg.role}) ---\n${msg.content}\n`;
-      });
-      reply(output);
+      reply(`\n${systemMessage('History is empty.')}`);
+      return;
     }
+    const entries = history.map((msg, idx) => `\n--- Message ${idx + 1} (${msg.role}) ---\n${msg.content}\n`);
+    reply(`\n${systemMessage('Full Conversation History:')}\n${entries.join('')}`);
   }
 });
 
@@ -92,7 +91,7 @@ registry.register({
     const size = history.reduce((sum, msg) => sum + msg.content.length, 0);
     const maxChars = agent.maxContextChars;
     const percentage = ((size / maxChars) * 100).toFixed(2);
-    reply(`\n\x1b[33m[System]: Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.\x1b[0m`);
+    reply(`\n${systemMessage(`Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.`)}`);
   }
 });
 
