@@ -121,6 +121,30 @@ export class Agent {
     return task;
   }
 
+  private async executeTool(call: ToolCall): Promise<{ call: ToolCall; result?: any; error?: string }> {
+    const tool = this.config.tools.find(t => t.name === call.name);
+    if (!tool) {
+      return { call, error: `Tool '${call.name}' not found.` };
+    }
+
+    // Validate arguments using Zod
+    if (tool.parameters) {
+      const { jsonSchemaToZod } = require('../utils/zodSchema');
+      const validation = jsonSchemaToZod(tool.parameters).safeParse(call.args);
+      if (!validation.success) {
+        const errorMessages = validation.error.issues.map((issue: any) => `Validation error at '${issue.path.join('.')}': ${issue.message}`).join(', ');
+        return { call, error: `Invalid arguments for tool '${call.name}': ${errorMessages}` };
+      }
+      call.args = validation.data;
+    }
+
+    try {
+      return { call, result: await tool.execute(call.args) };
+    } catch (err: any) {
+      return { call, error: err.message || String(err) };
+    }
+  }
+
   private async runExclusive(userInput: string): Promise<string> {
     const historySnapshot = this.memory.snapshot();
     const systemPrompt = buildSystemPrompt(
@@ -186,31 +210,7 @@ export class Agent {
         return responseText;
       }
 
-      const toolResults = await Promise.all(toolCalls.map(async (call: ToolCall) => {
-        const tool = this.config.tools.find(t => t.name === call.name);
-        if (!tool) {
-          return { call, error: `Tool '${call.name}' not found.` };
-        }
-
-        // Validate arguments using Zod
-        if (tool.parameters) {
-          const { jsonSchemaToZod } = require('../utils/zodSchema');
-          const zodSchema = jsonSchemaToZod(tool.parameters);
-          const validation = zodSchema.safeParse(call.args);
-          if (!validation.success) {
-            const errorMessages = validation.error.issues.map((issue: any) => `Validation error at '${issue.path.join('.')}': ${issue.message}`).join(', ');
-            return { call, error: `Invalid arguments for tool '${call.name}': ${errorMessages}` };
-          }
-          call.args = validation.data;
-        }
-
-        try {
-          const result = await tool.execute(call.args);
-          return { call, result };
-        } catch (err: any) {
-          return { call, error: err.message || String(err) };
-        }
-      }));
+      const toolResults = await Promise.all(toolCalls.map(call => this.executeTool(call)));
 
       const cap = this.config.maxToolResultChars!;
       let resultMessage = '';
