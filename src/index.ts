@@ -9,6 +9,12 @@ import { weatherTool } from './harness/tools/weather';
 import { loadSkills, createReadSkillTool } from './harness/skills';
 import { loadMCPServers } from './harness/mcp/MCPLoader';
 import { CommandRegistry, CommandContext } from './ui/CommandRegistry';
+
+function formatList(label: string, items: { name: string; description: string }[]): string {
+  if (items.length === 0) return `\n\x1b[33m[System]: No ${label} available.\x1b[0m`;
+  return `\nAvailable ${label}:\n` + items.map(i => `  ${i.name.padEnd(20)} - ${i.description}\n`).join('');
+}
+
 const registry = new CommandRegistry();
 
 registry.register({
@@ -66,13 +72,7 @@ registry.register({
   name: '/skills',
   description: 'Show available skills',
   execute: ({ skills, reply }) => {
-    if (skills.length === 0) {
-      reply('\n\x1b[33m[System]: No skills available.\x1b[0m');
-    } else {
-      let output = '\nAvailable skills:\n';
-      skills.forEach(s => output += `  ${s.name.padEnd(20)} - ${s.description}\n`);
-      reply(output);
-    }
+    reply(formatList('skills', skills));
   }
 });
 
@@ -80,13 +80,7 @@ registry.register({
   name: '/tools',
   description: 'Show available tools',
   execute: ({ tools, reply }) => {
-    if (tools.length === 0) {
-      reply('\n\x1b[33m[System]: No tools available.\x1b[0m');
-    } else {
-      let output = '\nAvailable tools:\n';
-      tools.forEach(t => output += `  ${t.name.padEnd(20)} - ${t.description}\n`);
-      reply(output);
-    }
+    reply(formatList('tools', tools));
   }
 });
 

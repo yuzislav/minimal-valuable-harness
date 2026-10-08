@@ -13,13 +13,9 @@ export class TerminalUI {
 
   constructor(private commandsList: { name: string; description: string }[]) {
     const completer = (line: string) => {
-      const commandNames = this.commandsList.map(c => c.name);
       if (line.startsWith('/')) {
-        let hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
-        if (line === '/' && hits.includes('/help')) {
-          hits = ['/help', ...hits.filter(h => h !== '/help')];
-        }
-        return [hits.length ? [hits[0]] : commandNames, line];
+        const hits = this.matchCommands(line);
+        return [hits.length ? [hits[0]] : this.commandsList.map(c => c.name), line];
       }
       return [[], line];
     };
@@ -39,12 +35,7 @@ export class TerminalUI {
         
         const line = rlInternal.line;
         if (line && line.startsWith('/') && rlInternal.cursor === line.length) {
-          const commandNames = this.commandsList.map(c => c.name);
-          let hits = commandNames.filter((c) => c.startsWith(line.toLowerCase()));
-          if (line === '/' && hits.includes('/help')) {
-            hits = ['/help', ...hits.filter(h => h !== '/help')];
-          }
-          const hit = hits[0];
+          const hit = this.matchCommands(line)[0];
           
           if (hit && hit.length > line.length) {
             const suggestion = hit.slice(line.length);
@@ -64,6 +55,15 @@ export class TerminalUI {
         });
       });
     }
+  }
+
+  /** Commands starting with `line`, with /help first when only '/' is typed. */
+  private matchCommands(line: string): string[] {
+    const hits = this.commandsList.map(c => c.name).filter(c => c.startsWith(line.toLowerCase()));
+    if (line === '/' && hits.includes('/help')) {
+      return ['/help', ...hits.filter(h => h !== '/help')];
+    }
+    return hits;
   }
 
   public askQuestion(query: string): Promise<string> {
