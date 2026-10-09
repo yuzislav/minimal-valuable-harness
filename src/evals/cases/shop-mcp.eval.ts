@@ -15,7 +15,12 @@
  *   Task 8 : София Яковлев, 16 orders
  */
 
+import { ToolCall } from '../../harness/types';
 import { EvalSuite } from '../types';
+
+const onlySql = (calls: ToolCall[]) => calls.filter(c => c.name === 'execute_read_only_sql');
+const mcpOnly = (calls: ToolCall[]) =>
+  calls.filter(c => c.name === 'execute_read_only_sql' || c.name === 'get_database_schema');
 
 export const shopMcpEvalSuite: EvalSuite = {
   name: 'Shop MCP — Functional Task Evals',
@@ -65,11 +70,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 2 — Germany Customers: agent must handle missing country column',
       input: 'How many customers are from Germany?',
       assert: ({ response, toolCalls }) => {
-        const mcpCalls = toolCalls.filter(
-          c =>
-            c.name === 'execute_read_only_sql' ||
-            c.name === 'get_database_schema',
-        );
+        const mcpCalls = mcpOnly(toolCalls);
         if (mcpCalls.length === 0) {
           return { passed: false, error: 'Agent did not call any MCP tool' };
         }
@@ -122,11 +123,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 3 — Country with most customers: agent must handle missing country column',
       input: 'Which country has the most customers?',
       assert: ({ response, toolCalls }) => {
-        const mcpCalls = toolCalls.filter(
-          c =>
-            c.name === 'execute_read_only_sql' ||
-            c.name === 'get_database_schema',
-        );
+        const mcpCalls = mcpOnly(toolCalls);
         if (mcpCalls.length === 0) {
           return { passed: false, error: 'Agent did not call any MCP tool' };
         }
@@ -179,9 +176,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 4 — Top spender: correct name, email, and total',
       input: 'Who is the customer who spent the most money?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -193,9 +188,7 @@ export const shopMcpEvalSuite: EvalSuite = {
         const namePresent =
           response.includes('\u0414\u043c\u0438\u0442\u0440\u0438\u0439') ||
           response.includes('\u0425\u0430\u0440\u0438\u0442\u043e\u043d\u043e\u0432') ||
-          response.toLowerCase().includes('dmitriy') ||
-          response.toLowerCase().includes('kharitonov') ||
-          response.toLowerCase().includes('dmitriy.kharitonov845@mail.ru');
+          ['dmitriy', 'kharitonov'].some((n) => response.toLowerCase().includes(n));
 
         if (!namePresent) {
           return {
@@ -244,9 +237,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 5 — Top 5 products: names, units sold, revenue in response',
       input: 'What are the top 5 best-selling products?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -297,9 +288,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 6 — Top 3 categories: correct category names in response',
       input: 'What are the top 3 product categories by revenue?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -350,9 +339,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 7 — 2025 revenue: agent must discover all orders are in 2026',
       input: 'How much revenue did we generate in 2025?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -404,9 +391,7 @@ export const shopMcpEvalSuite: EvalSuite = {
       name: 'Task 8 — Most orders: correct customer name and order count',
       input: 'Which customer placed the most orders?',
       assert: ({ response, toolCalls }) => {
-        const sqlCalls = toolCalls.filter(
-          c => c.name === 'execute_read_only_sql',
-        );
+        const sqlCalls = onlySql(toolCalls);
         if (sqlCalls.length === 0) {
           return {
             passed: false,
@@ -434,9 +419,7 @@ export const shopMcpEvalSuite: EvalSuite = {
         const namePresent =
           response.includes('\u0421\u043e\u0444\u0438\u044f') || // София
           response.includes('\u042f\u043a\u043e\u0432\u043b\u0435\u0432') || // Яковлев
-          response.toLowerCase().includes('sofiya') ||
-          response.toLowerCase().includes('sofiia') ||
-          response.toLowerCase().includes('yakovlev');
+          ['sofiya', 'sofiia', 'yakovlev'].some((n) => response.toLowerCase().includes(n));
 
         if (!namePresent) {
           return {

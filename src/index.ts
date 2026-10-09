@@ -9,6 +9,14 @@ import { weatherTool } from './harness/tools/weather';
 import { loadSkills, createReadSkillTool } from './harness/skills';
 import { loadMCPServers } from './harness/mcp/MCPLoader';
 import { CommandRegistry, CommandContext } from './ui/CommandRegistry';
+
+const systemMessage = (text: string) => `\x1b[33m[System]: ${text}\x1b[0m`;
+
+function formatList(label: string, items: { name: string; description: string }[]): string {
+  if (items.length === 0) return `\n${systemMessage(`No ${label} available.`)}`;
+  return `\nAvailable ${label}:\n` + items.map(i => `  ${i.name.padEnd(20)} - ${i.description}\n`).join('');
+}
+
 const registry = new CommandRegistry();
 
 registry.register({
@@ -22,7 +30,7 @@ registry.register({
   description: 'Clear the agent context/history',
   execute: ({ agent, reply }) => {
     agent.clearHistory();
-    reply('\x1b[33m[System]: Context cleared. Started a new session.\x1b[0m');
+    reply(systemMessage('Context cleared. Started a new session.'));
   }
 });
 
@@ -31,7 +39,7 @@ registry.register({
   description: 'Toggle debug logging for this conversation',
   execute: ({ agent, reply }) => {
     agent.debug = !agent.debug;
-    reply(`\x1b[33m[System]: Debug logging is now ${agent.debug ? 'ON' : 'OFF'}.\x1b[0m`);
+    reply(systemMessage(`Debug logging is now ${agent.debug ? 'ON' : 'OFF'}.`));
   }
 });
 
@@ -41,14 +49,11 @@ registry.register({
   execute: ({ agent, reply }) => {
     const history = agent.getHistory();
     if (history.length === 0) {
-      reply('\n\x1b[33m[System]: History is empty.\x1b[0m');
-    } else {
-      let output = '\n\x1b[33m[System]: Full Conversation History:\x1b[0m\n';
-      history.forEach((msg: any, idx: number) => {
-        output += `\n--- Message ${idx + 1} (${msg.role}) ---\n${msg.content}\n`;
-      });
-      reply(output);
+      reply(`\n${systemMessage('History is empty.')}`);
+      return;
     }
+    const entries = history.map((msg, idx) => `\n--- Message ${idx + 1} (${msg.role}) ---\n${msg.content}\n`);
+    reply(`\n${systemMessage('Full Conversation History:')}\n${entries.join('')}`);
   }
 });
 
@@ -66,13 +71,7 @@ registry.register({
   name: '/skills',
   description: 'Show available skills',
   execute: ({ skills, reply }) => {
-    if (skills.length === 0) {
-      reply('\n\x1b[33m[System]: No skills available.\x1b[0m');
-    } else {
-      let output = '\nAvailable skills:\n';
-      skills.forEach(s => output += `  ${s.name.padEnd(20)} - ${s.description}\n`);
-      reply(output);
-    }
+    reply(formatList('skills', skills));
   }
 });
 
@@ -80,13 +79,7 @@ registry.register({
   name: '/tools',
   description: 'Show available tools',
   execute: ({ tools, reply }) => {
-    if (tools.length === 0) {
-      reply('\n\x1b[33m[System]: No tools available.\x1b[0m');
-    } else {
-      let output = '\nAvailable tools:\n';
-      tools.forEach(t => output += `  ${t.name.padEnd(20)} - ${t.description}\n`);
-      reply(output);
-    }
+    reply(formatList('tools', tools));
   }
 });
 
@@ -98,7 +91,7 @@ registry.register({
     const size = history.reduce((sum, msg) => sum + msg.content.length, 0);
     const maxChars = agent.maxContextChars;
     const percentage = ((size / maxChars) * 100).toFixed(2);
-    reply(`\n\x1b[33m[System]: Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.\x1b[0m`);
+    reply(`\n${systemMessage(`Current context size is ${size}/${maxChars} characters (${percentage}%) across ${history.length} messages.`)}`);
   }
 });
 
@@ -126,13 +119,15 @@ async function main() {
   const activeMcpManagers = await loadMCPServers(tools);
 
   const createAgent = () => createAgentFromEnv({ tools, skills });
+  const disconnectMcp = async () => {
+    for (const manager of activeMcpManagers) {
+      await manager.disconnect();
+    }
+  };
 
   const args = process.argv.slice(2);
-  let uiMode = 'terminal';
   const uiArgIndex = args.indexOf('--ui');
-  if (uiArgIndex !== -1 && args.length > uiArgIndex + 1) {
-    uiMode = args[uiArgIndex + 1];
-  }
+  const uiMode = (uiArgIndex !== -1 && args[uiArgIndex + 1]) || 'terminal';
 
   if (uiMode === 'telegram') {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -151,9 +146,7 @@ async function main() {
 
     const shutdown = async () => {
       await telegramUI.stop();
-      for (const manager of activeMcpManagers) {
-        await manager.disconnect();
-      }
+      await disconnectMcp();
       process.exit(0);
     };
 
@@ -162,8 +155,7 @@ async function main() {
   } else {
     const agent = createAgent();
     
-    const initialPromptArgs = args.filter(a => a !== '--ui' && a !== uiMode);
-    const initialPrompt = initialPromptArgs.length > 0 ? initialPromptArgs[0] : undefined;
+    const initialPrompt = args.filter(a => a !== '--ui' && a !== uiMode)[0];
     
     if (initialPrompt && !initialPrompt.startsWith('--')) {
       console.log(`[User]: ${initialPrompt}\n`);
@@ -191,10 +183,7 @@ async function main() {
     }
 
     terminal.close();
-
-    for (const manager of activeMcpManagers) {
-      await manager.disconnect();
-    }
+    await disconnectMcp();
   }
 }
 
